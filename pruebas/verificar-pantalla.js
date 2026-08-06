@@ -50,11 +50,6 @@ function af(descripcion, condicion, detalle) {
   }
 }
 
-function igual(descripcion, obtenido, esperado) {
-  af(descripcion, obtenido === esperado,
-     "obtuve " + JSON.stringify(obtenido) + ", esperaba " + JSON.stringify(esperado));
-}
-
 // --- los datos de verdad, producidos por el mismo código que sirve la API ----
 //
 // No es un JSON escrito a mano: es `capataz.estado()`, leyendo los proyectos
@@ -109,10 +104,22 @@ af("la cabecera dice cuántos proyectos y cuándo",
    /\d{4}-\d{2}-\d{2}/.test(pintado.cabecera.textContent) &&
    pintado.cabecera.textContent.indexOf("proyecto") >= 0,
    pintado.cabecera.textContent);
-datos.proyectos.forEach(function (p) {
-  af("la tarjeta de «" + p.nombre + "» está dibujada",
-     pintado.cuerpo.innerHTML.indexOf(">" + p.nombre + "<") >= 0);
-});
+/* **Una aserción por comprobación, no una por proyecto.** El total de
+ * aserciones es parte del resultado, y con un `forEach` que suma una por
+ * proyecto el total dependería de cuántas carpetas hay al lado — se midió: 274
+ * en la carpeta de trabajo y 260 en un clon sin vecinos, como el del CI, sin
+ * que nada hubiera cambiado. Un número que se mueve solo deja de servir para
+ * comparar una rama con main. Agrupado da 258 en los dos lados, y **el detalle
+ * dice cuáles fallaron**, que es lo que uno necesita para arreglarlo. */
+function todos(descripcion, lista, prueba) {
+  const malos = lista.filter(function (p) { return !prueba(p); })
+                     .map(function (p) { return p.nombre; });
+  af(descripcion + " (" + lista.length + " proyectos)", malos.length === 0,
+     malos.join(", "));
+}
+
+todos("cada proyecto vigilado tiene su tarjeta dibujada", datos.proyectos,
+      function (p) { return pintado.cuerpo.innerHTML.indexOf(">" + p.nombre + "<") >= 0; });
 
 /* Los proyectos cuyo seguimiento SÍ se pudo leer. En el CI no hay ninguno de
  * los vecinos —el checkout trae capataz solo—, y una tarjeta que no encontró su
@@ -153,19 +160,21 @@ function bloqueCiDe(html, nombre) {
 }
 
 console.log("§ 2 · El CI que no se pudo leer no se pinta verde");
-legibles.forEach(function (p) {
-  const bloque = bloqueCiDe(pintado.cuerpo.innerHTML, p.nombre);
-  af("«" + p.nombre + "» dibuja un bloque de CI", bloque.length > 0);
-  igual("el lector dice «no sé» para " + p.nombre, p.ci.estado, "no sé");
-  af("la pantalla lo muestra como «no sé»", bloque.indexOf("no sé") >= 0, bloque);
-  af("y su chip NO lleva la clase verde",
-     !/class="chip[^"]*\bverde\b/.test(bloque), bloque);
-  af("ni la clase roja: no saber no es haber fallado",
-     !/class="chip[^"]*\brojo\b/.test(bloque), bloque);
-  af("lleva la clase «nose», que es la de borde punteado",
-     /class="chip[^"]*\bnose\b/.test(bloque), bloque);
-  af("y trae el porqué a mano, plegado", bloque.indexOf("por qué no se sabe") >= 0);
-});
+const ci = function (p) { return bloqueCiDe(pintado.cuerpo.innerHTML, p.nombre); };
+todos("cada proyecto legible dibuja su bloque de CI", legibles,
+      function (p) { return ci(p).length > 0; });
+todos("el lector dice «no sé» para todos —hoy no hay forma de leerlo—", legibles,
+      function (p) { return p.ci.estado === "no sé"; });
+todos("y la pantalla lo muestra como «no sé»", legibles,
+      function (p) { return ci(p).indexOf("no sé") >= 0; });
+todos("y NINGÚN chip de CI lleva la clase verde", legibles,
+      function (p) { return !/class="chip[^"]*\bverde\b/.test(ci(p)); });
+todos("ni la clase roja: no saber no es haber fallado", legibles,
+      function (p) { return !/class="chip[^"]*\brojo\b/.test(ci(p)); });
+todos("lleva la clase «nose», que es la de borde punteado", legibles,
+      function (p) { return /class="chip[^"]*\bnose\b/.test(ci(p)); });
+todos("y trae el porqué a mano, plegado", legibles,
+      function (p) { return ci(p).indexOf("por qué no se sabe") >= 0; });
 
 console.log("§ 3 · …y con un CI verde de verdad, sí se pinta verde");
 /* Sin esta sección, la § 2 pasaría igual con una pantalla que no pinta verde
