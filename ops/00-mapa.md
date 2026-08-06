@@ -55,29 +55,46 @@ Una ruta absoluta ahí deja andando a uno y roto al otro, según quién corrió 
 
 - **Un agente en su contenedor**: la carpeta montada, `github.com` por HTTPS y
   poco más. **`api.github.com` está fuera de la lista blanca** —devuelve `000`,
-  medido en ERP 360— y `gh` no está instalado, así que **el estado del CI no se
-  puede leer desde acá**. El puerto 22 está cerrado: SSH y las deploy keys no
-  son una opción, y por eso el push es HTTPS con token.
+  medido en ERP 360 y vuelto a medir el 2026-08-06— y `gh` no está instalado,
+  así que **el estado del CI no se puede leer desde acá**. `codeload.github.com`
+  y `raw.githubusercontent.com` también dan `000`: el **único** camino a GitHub
+  es `git` contra `github.com`, que es por donde capataz lee todo lo demás. El
+  puerto 22 está cerrado: SSH y las deploy keys no son una opción, y por eso el
+  push es HTTPS con token.
 - **Pablo, en la Mac**: todo lo anterior más el navegador, que es lo único que
   puede *mirar* la pantalla angosta (punto D1) y abrir una corrida del CI.
 - **Nadie llega a un servidor**, porque no hay ninguno todavía.
 
 ## Qué mira capataz, y qué no toca
 
-Capataz **sólo lee**. De cada proyecto vigilado toca, en modo lectura:
+Capataz **sólo lee, y desde el 2026-08-06 lee de GitHub y no de ninguna
+carpeta**. Un proyecto es un `owner/repo` en `proyectos.json`. De cada uno saca,
+por `git` contra `github.com`:
 
 ```
-<proyecto>/<su archivo de seguimiento>      los puntos y sus estados
-<proyecto>/ops/60-roles.md                  qué tipos de agente existen ahí
-<proyecto>/panel/agentes.jsonl              quién trabaja ahora
-<proyecto>/.git                             ramas, fechas y totales medidos
-<proyecto>/pruebas/total-aserciones.txt     el total, leído por `git show`
+main:<su archivo de seguimiento>        los puntos, sus estados y quién tiene cuál
+main:ops/60-roles.md                    qué tipos de agente existen ahí
+refs/heads/*                            las ramas, su autor y hace cuánto se movieron
+<rama>:pruebas/total-aserciones.txt     el total MEDIDO de cada rama
+git log --all                           los commits recientes, con autor
 ```
 
-Y **no escribe ni uno solo**. `lector.py` no abre nada en modo escritura y sus
-comandos de git pasan por una lista blanca de subcomandos de lectura;
-`pruebas/verificar-lector.py` § 1 saca una foto de un proyecto de prueba, corre
-`mirar()` entero y compara byte a byte.
+**El `panel/agentes.jsonl` ya no se lee.** No se versiona a propósito, así que
+nunca llega a la nube: mostrarlo sería mostrar los agentes de una sola máquina
+como si fueran la cuadrilla entera. Quién trabaja sale de las ramas empujadas.
+
+**Dónde escribe, que es el único lugar:**
+
+```
+$TMPDIR/capataz-espejos/<owner>__<repo>.git    espejos de sólo lectura
+```
+
+Son clones `--mirror` descartables. `nube._git()` rechaza cualquier comando de
+git cuyo destino esté **fuera** de esa carpeta —o sea que capataz no corre git
+sobre el repositorio de nadie, ni para leer—, y `pruebas/verificar-nube.py` § 5
+borra un espejo entero, vuelve a leer y compara: si algo viviera sólo ahí, se
+pone rojo. `CAPATAZ_ESPEJOS` mueve la carpeta; `CAPATAZ_REFRESCO` (60 s por
+defecto) dice cada cuánto se le vuelve a preguntar a GitHub.
 
 ## Los runbooks
 

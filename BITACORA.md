@@ -378,3 +378,230 @@ dice el capítulo de arriba:
 - **T9** — capataz no tiene `ops/60-roles.md`, así que la tarjeta de **su propio**
   proyecto dice «qué roles existen · no sé». Es correcto y es feo: capataz es el
   único de los tres que puede arreglarlo sin tocar el repo de nadie.
+
+---
+
+# Tanda 2 — capataz mira la nube, 2026-08-06
+
+> Pablo lo pidió con una frase: **«capataz siempre tiene que estar mirando la
+> nube de GitHub, justamente ésa es la gracia, y al observar variaciones en vivo
+> va a poder ver los agentes que se prenden y apagan».** Este capítulo es por
+> qué eso obligó a rehacer de dónde salen los datos, y qué se decidió en cada
+> bifurcación. Rama `t10-mirar-la-nube`, `coder-3`.
+
+## Por qué la carpeta local estaba mal, y no es una cuestión de gusto
+
+Tres motivos, y el tercero pasó **dos veces el mismo día**:
+
+1. **Un agente corre donde sea.** La Mac, un contenedor, otra máquina. Su
+   trabajo se hace visible cuando **empuja**, y la carpeta de Pablo no lo ve. Un
+   tablero que mira una carpeta muestra a los agentes de esa carpeta.
+2. **`git push` ya era el árbitro** del proyecto. Si el remoto es quien decide
+   quién tiene qué punto, entonces el remoto **es** la verdad, y capataz estaba
+   mirando una copia de la verdad. No es lo mismo aunque casi siempre coincida.
+3. **La carpeta desaparece.** `ERP360-Template/` se fue de la Mac entre las
+   01:26 y las 02:24 y capataz se quedó ciego con el repositorio entero
+   publicado en GitHub — 46 archivos, `443178a`. Y a las 03:12, escribiendo
+   justamente esta tanda, **desapareció la carpeta `capataz/` entera**, con el
+   trabajo sin commitear. Se rehízo clonando `main` de GitHub y aplicando todo
+   de nuevo; de ahí salió la costumbre, para el resto de la tanda, de commitear
+   y empujar cada vez que había algo que valiera la pena no perder.
+
+El punto 3 es el argumento entero en una anécdota: **lo único que sobrevivió a
+las dos desapariciones fue lo que estaba en GitHub.**
+
+## La decisión central: git, no la API
+
+Los dos caminos, y por qué se eligió el que se eligió.
+
+**Lo medido primero**, desde el contenedor de un agente, el 2026-08-06:
+
+| Destino | HTTP |
+|---|---|
+| `github.com` | **200** |
+| `api.github.com` | 000 |
+| `codeload.github.com` | 000 |
+| `raw.githubusercontent.com` | 000 |
+
+O sea que **el único camino a GitHub es `git` contra `github.com`**. No es sólo
+que la API esté bloqueada: los dos atajos que uno probaría después —bajar un tar
+por `codeload`, leer un archivo por `raw`— también lo están.
+
+- **(a) La API.** Da ramas, commits, corridas del CI y contenido de archivos en
+  un formato cómodo. Y **desde acá no se puede probar contra la realidad**: sólo
+  contra respuestas escritas a mano. En la Mac funcionaría.
+- **(b) `git`.** Da ramas, commits con autor y fecha, y el contenido de
+  cualquier archivo de cualquier rama. **Se prueba de verdad, ahora, contra los
+  repositorios reales.** No da el estado del CI.
+
+Se eligió **(b) para todo lo que da, y (a) sólo para el CI**, que es lo único
+que git no puede contestar. El motivo no es preferencia: es la regla 2. Un
+lector de red probado únicamente contra respuestas grabadas **pasa entero con la
+red rota**, y eso es el arnés vacuo con otra ropa. Con (b), `verificar-nube.py`
+clona los repositorios de verdad y compara contra `git ls-remote` —una segunda
+llamada de red, por otro camino— rama por rama y SHA por SHA.
+
+De (a) quedó `nube.pedir_ci()`, y **con su límite escrito en tres lugares**: en
+el propio archivo, en la primera línea de `pruebas/grabado/actions-runs.json`
+(«RESPUESTAS ESCRITAS A MANO, NO CAPTURADAS») y como punto abierto T11. Lo que
+sí se ejecuta contra la realidad es el otro lado: desde acá el pedido falla, y
+**fallar termina en «no sé» con el motivo escrito**. Eso no es una hipótesis.
+
+### `git archive --remote`, que habría evitado el espejo
+
+Se probó antes de escribir nada: GitHub contesta `operation not supported by
+protocol`. No hay forma de leer un blob remoto sin bajar objetos. De ahí sale el
+espejo, y no de comodidad.
+
+## El espejo, y por qué no rompe «capataz sólo lee»
+
+Capataz **escribe**, y hay que decirlo en voz alta: un clon `--mirror` por
+repositorio, en el temporal. Lo que lo hace compatible con la regla 1 son tres
+cosas, y las tres están verificadas:
+
+1. **Sólo adentro de su carpeta de espejos.** `nube._git()` tiene dos compuertas
+   —lista blanca de subcomandos, y el destino tiene que estar adentro del
+   espejo— y la segunda es la que vale: la primera se burla con un subcomando
+   nuevo que parezca inocente, la segunda dice que pase lo que pase, lo que se
+   toque va a ser una copia descartable. Es una invariante **más fuerte** que la
+   que había: antes capataz corría `git` sobre el repositorio de otro proyecto,
+   aunque fuera de lectura. Ahora no lo toca ni para leer.
+2. **Lo de adentro es derivado.** `verificar-nube.py` § 5 borra el espejo
+   entero, vuelve a leer y compara byte por byte. Si algo viviera sólo ahí, se
+   pone rojo — se lo vio rojo guardando un contador de lecturas adentro del
+   espejo: `veces_leido: 1` contra `2`.
+3. **`lector.py` quedó puro.** Sin red, sin disco, sin un solo `subprocess`, y
+   verificado sobre el árbol sintáctico. La mitad que decide qué se muestra no
+   puede tocar nada porque no tiene con qué.
+
+La regla 1 prohíbe que capataz sea **fuente de verdad**. No prohíbe un buffer de
+transporte, y la diferencia se puede afirmar con una aserción.
+
+## `panel/agentes.jsonl`: se dejó de leer
+
+**Decisión: la cuadrilla sale enteramente de git.** El motivo no es de gusto y
+es corto: ese archivo **no se versiona a propósito** —tres agentes en tres
+copias producen tres archivos que no se fusionan, decisión de ERP 360—, así que
+**nunca va a llegar a la nube**. Seguir leyéndolo de la carpeta local sería
+mostrar los agentes que corrieron *en esta máquina* como si fueran la cuadrilla
+entera. Eso no es un dato incompleto: es la mentira exacta que la regla 3
+prohíbe, porque un tablero con dos agentes se lee igual esté completo o no.
+
+Lo que reemplaza al archivo llega a la nube por definición: **la rama que un
+agente empujó** y **el autor de sus commits**. Y trae un dato que las marcas no
+tenían — hace cuánto se movió, al segundo.
+
+Efecto lateral honesto: en ERP 360 los commits están firmados `Pablo Silveira`,
+no con un nombre de rol, así que ahí el reparto por rol dice **«sin rol»**. Es
+correcto y además es información: quiere decir que en ese repositorio los
+agentes no firman con su rol, y entonces la cuadrilla por rol **no se puede
+saber desde git**. Se prefirió eso a inventarlo.
+
+## Prendido o caído: por qué son cinco palabras y no dos
+
+El pedido era distinguir «un agente trabajando» de «un agente que se cayó». Dos
+palabras no alcanzan, y las dos que faltan son las que un umbral solo arruina:
+
+- **`integrada`** — una rama sin ni un commit por delante de `main`. No es un
+  agente caído: es una rama **terminada**. De las cinco ramas que había el
+  2026-08-06 en los dos repositorios vigilados, **tres eran ésta**. Con un solo
+  umbral, capataz habría inventado tres incendios.
+- **`dudoso`** — entre 45 minutos y 4 horas. Un agente pensando y uno caído se
+  parecen mucho a los veinte minutos y nada a las seis horas, y ese rato tiene
+  que verse como lo que es. Tiene su propio color, que **no es ni el verde ni el
+  rojo**: pintarlo de cualquiera de los dos sería afirmar algo que capataz no
+  sabe. Es la regla 3 aplicada a un agente.
+
+Y una quinta, `sin rama`, para un `en curso (fulano)` del que no llegó ningún
+commit. Puede ser alguien que trabaja sin empujar todavía o alguien que se cayó
+antes del primer commit; **capataz no puede distinguirlos y no elige**.
+
+## Finca 360: queda declarado, sin publicar
+
+Es repositorio git local (`cf6add0`) y **no está en GitHub**. Las dos salidas
+eran sacarlo de la lista o dejarlo con lectura local.
+
+**Se dejó declarado, con `repo: null` y su motivo escrito en `proyectos.json`,
+y no se lee nada.** Los dos porqués:
+
+- **No se lo sacó** porque entonces el hecho de que Finca 360 existe y está sin
+  publicar no quedaría escrito en ningún lado, y capataz diría que vigila dos
+  proyectos cuando son tres.
+- **No se le dejó lectura local** porque mantener el lector de carpetas vivo
+  para un solo proyecto es mantener entera la clase de bug que esta tanda vino a
+  matar — y la habría mantenido en el proyecto que corre en una VM ajena, que es
+  donde más caro sale.
+
+En la pantalla se ve como **«sin publicar · no sé»**, ni rojo ni verde: no está
+roto, está sin publicar, y pintar de rojo algo que está así a propósito es el
+aviso que sale siempre. Se arregla publicándolo → punto T12.
+
+## Los dos conteos, que es lo que hace creíble al resto
+
+Contra los repositorios reales, el 2026-08-06:
+
+| | capataz | a mano |
+|---|---|---|
+| `pablosilveira16/erp360` · abiertos | pendiente 22 · diferido 5 | pendiente 22 · diferido 5 |
+| `pablosilveira16/erp360` · historia | hecho 44 | hecho 44 |
+| `pablosilveira16/capataz` · abiertos | pendiente 10 · diferido 3 | pendiente 10 · diferido 3 |
+| `pablosilveira16/capataz` · historia | hecho 14 | hecho 14 |
+
+El conteo a mano de ERP 360 se hizo con un script aparte, de otro algoritmo
+—regex por línea en vez de armado de tablas— sobre el mismo texto bajado de
+`main`. Y coincide con lo que capataz había leído de la **carpeta** a las 01:26
+del mismo día, antes de que desapareciera: 22 pendientes y 44 hechos (D5).
+
+Esa comparación quedó **adentro del arnés** y no en esta bitácora:
+`verificar-nube.py` § 2 vuelve a contar a mano cada vez, sobre el texto real, y
+compara. Un número escrito en un documento envejece; una aserción no.
+
+## Lo que se vio rojo, a propósito
+
+| Bug puesto de vuelta | Qué se puso rojo |
+|---|---|
+| `clone --mirror --depth` **sin** `--no-single-branch` | 2 rojas: el espejo trae 1 rama de 3. **Era un bug de verdad**, encontrado así |
+| `_git()` sin la compuerta de destino | 5 rojas: git corriendo sobre el repositorio de otro |
+| Un solo umbral en `estado_rama()` | 6 rojas: una rama integrada pasa a «caído» |
+| `dudoso` con la clase CSS de `trabajando` | 1 roja, en la pantalla dibujada |
+| La cuadrilla diciendo «nadie» cuando no pudo leer | 1 roja |
+| `leer()` devolviendo `ok=True` vacío ante un error | 6 rojas |
+| Un contador de lecturas guardado en el espejo | 1 roja: `veces_leido` 1 contra 2 |
+| `import subprocess` de vuelta en `lector.py` | 1 roja |
+
+Y una que **no** se puso de vuelta a propósito: `pruebas/verificar-credenciales.py`
+se puso rojo solo, dos veces, porque el señuelo con forma de PAT que usa
+`verificar-nube.py` estaba escrito de una pieza. Las dos rojas eran **correctas**
+—ese arnés no puede distinguir un señuelo de un token filtrado, y no debería
+poder, porque una lista de excepciones es por donde se escapa el primero de
+verdad—. Se arregló armando el señuelo en pedazos, y reescribiendo la rama:
+un token en la historia no se borra con el commit siguiente.
+
+## El total
+
+**268 → 389 aserciones.** El desglose, porque el número solo no dice nada:
+
+| Arnés | Antes | Después |
+|---|---|---|
+| `verificar-lector.py` | 81 | 95 |
+| `verificar-nube.py` | — | **81** (nuevo, contra los repositorios reales) |
+| `verificar-pantalla.js` | 36 | 50 |
+| `verificar-contrato.sh` | 48 | 60 |
+| `verificar-angosto.py` | 28 | 28 |
+| `verificar-credenciales.py` | 75 | 75 |
+
+De las 121 nuevas, **12 son de `verificar-contrato.sh` y no verifican nada
+nuevo**: ese arnés cuenta una aserción por fila del `SEGUIMIENTO.md`, así que
+escribir puntos sube el total. Es el punto T8, y esta tanda lo volvió a pagar.
+
+## Qué quedó abierto
+
+- **T11** — la lectura del CI contra `api.github.com` **de verdad**, desde la
+  Mac. Es lo único de esta tanda que nadie pudo probar contra la realidad.
+- **T12** — publicar Finca 360 en GitHub.
+- **T13** — los dos tokens alcanzan los dos repositorios, y
+  `ops/70-credenciales.md` dice «un token, un repositorio». Medido, no supuesto.
+- **T14** — el espejo no se limpia nunca.
+- **D5** — quedó reescrito: **el problema ya no es que capataz se quede ciego**
+  —lee de GitHub— sino **qué borra las carpetas de la Mac**. Pasó dos veces en
+  un día y la segunda se llevó una tanda a medio escribir.
