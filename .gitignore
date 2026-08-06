@@ -1,0 +1,27 @@
+__pycache__/
+*.pyc
+.DS_Store
+.venv/
+venv/
+
+# Capataz no guarda estado propio: no hay base y no puede haberla. Estas líneas
+# son la segunda cerradura de la regla 1 de `CLAUDE.md` —la primera es que no
+# hay ningún código que escriba una—, y `pruebas/verificar-lector.py` § 1 se
+# pone rojo si aparece un `open(..., "w")` en el lector.
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Nada con forma de credencial. El token de GitHub vive AFUERA del repo
+# —`../.credenciales/github-capataz.token`, `ops/70-credenciales.md`— y esto es
+# la segunda cerradura: la primera es que el archivo no esté en el árbol.
+*.token
+.credenciales/
+
+# La instantánea con la que se mira la pantalla angosta se genera y no se
+# versiona: es una foto de los datos de otro proyecto en un momento.
+_instantanea.html
+.pytest_cache/
+.idea/
+.vscode/
