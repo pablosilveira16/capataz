@@ -713,3 +713,31 @@ Antes de esta tanda eran 335 con las de la pantalla en cero, porque no había
 `node`. Con el binario oficial bajado a una carpeta temporal, la pantalla
 aportó 69. **Ese salto no es cobertura nueva de golpe**: 50 de esas aserciones
 ya existían y estaban salteándose en silencio, que es justo lo que T17 dice.
+
+## Y las dos rojas que la compuerta obligó a mirar
+
+Empujar pide `./verificar.sh` entero en verde —está en `CLAUDE.md` y está en
+código, adentro de `ops/empujar.sh`—, así que las cuatro rojas que venían de
+antes dejaron de ser «ya anotadas» y pasaron a ser el trabajo.
+
+**T15 · una premisa que envejeció sin que nadie la mirara.** El arnés declaraba
+`erp360` como el repositorio privado de la casa. Es público: `git ls-remote` sin
+ninguna credencial lo lee. Las tres aserciones del caso «privado sin credencial»
+no verificaban nada de lo que decían verificar — y no estaban en verde
+mintiendo, estaban en rojo, que es la única razón por la que se encontró. La
+salida no fue cambiarle el nombre al repositorio: **se mide**, una vez, con
+`ls-remote` y sin credencial, y hay una aserción de que el elegido de verdad no
+se alcanza. Si mañana ése también se hace público, se pone roja acá en vez de
+volverse vacua en silencio.
+
+**T16 · el señuelo que disparaba la alarma.** La aserción que busca tokens en
+toda la historia encontraba el `github_pat_…` **falso** con el que se prueba
+`limpiar_secreto()`. No hay ninguna credencial filtrada. Y el arnés hace bien en
+no distinguirlos: no tiene forma, y una lista de excepciones es exactamente por
+donde se escapa el primero de verdad.
+
+Lo que hizo que esto se pudiera arreglar sin drama fue **medir dónde estaba el
+literal** en vez de suponerlo. Parecía estar en `270bb84` —commit ya empujado,
+o sea reescribir historia publicada y forzar un push—, y estaba sólo en
+`0706590`: la rama local de respaldo de la copia divergida, que nunca salió de
+la Mac. Un `commit --amend` sobre una rama que nadie más tiene, y listo.

@@ -53,9 +53,47 @@ HOY = time.time()
 # el único que está garantizado presente y legible desde cualquier lado.
 PUBLICO = "pablosilveira16/capataz"
 
-# Uno privado de la misma cuenta, para el caso «sin credencial». No hace falta
-# tener el token: justamente se lo mira **sin** él.
-PRIVADO = "pablosilveira16/erp360"
+# El caso «no se alcanza sin credencial», que es el que hay que ver en el runner
+# del CI, donde `.credenciales/` no existe.
+#
+# **Se mide cuál sirve, no se supone.** Este arnés declaraba `erp360` como el
+# repositorio privado de la casa y el 2026-08-06 se puso rojo en tres
+# aserciones: `erp360` es **público**, así que sin credencial se lee igual y el
+# caso no ejercitaba nada de lo que decía ejercitar. La premisa había
+# envejecido sin que nadie la volviera a mirar, que es la forma que tiene una
+# aserción de volverse mentira sin cambiar una línea.
+#
+# Y no alcanza con cambiar el nombre por otro: si mañana ese otro también se
+# hace público, esto volvería al mismo lugar en silencio. Por eso se pregunta
+# —una vez, con `git ls-remote` y sin ninguna credencial— y hay una aserción de
+# que el repositorio elegido de verdad no se alcanza.
+DECLARADO_PRIVADO = "pablosilveira16/erp360"
+INALCANZABLE_SEGURO = "pablosilveira16/no-existe-jamas-2026-privado"
+
+
+def alcanzable_sin_credencial(repo):
+    """¿Se lee este repositorio sin ninguna credencial? Medido, no supuesto.
+
+    Sin config global ni de sistema —ahí vive el helper de credenciales de la
+    Mac, que si no contestaría por nosotros— y sin prompt: un arnés colgado
+    esperando una contraseña es peor que uno que falla.
+    """
+    entorno = dict(os.environ)
+    entorno.update({"GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": "",
+                    "GIT_CONFIG_GLOBAL": os.devnull,
+                    "GIT_CONFIG_SYSTEM": os.devnull})
+    try:
+        proceso = subprocess.Popen(
+            ["git", "ls-remote", "--exit-code", nube.url_de(repo), "HEAD"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=entorno)
+        proceso.communicate(timeout=90)
+        return proceso.returncode == 0
+    except Exception:
+        return False
+
+
+PRIVADO = (INALCANZABLE_SEGURO if alcanzable_sin_credencial(DECLARADO_PRIVADO)
+           else DECLARADO_PRIVADO)
 
 
 def af(descripcion, condicion, detalle=""):
@@ -317,13 +355,23 @@ try:
         ("un repositorio que no existe",
          {"nombre": "Fantasma", "repo": "pablosilveira16/no-existe-jamas-2026",
           "token": "no-existe.token"}, "github.com"),
-        # Privado y **sin credencial**: es el caso que hay que ver en el runner
-        # del CI, donde `.credenciales/` no existe. Se lo fuerza acá, así se
-        # ejercita igual en la Mac.
-        ("un repositorio privado sin credencial",
-         {"nombre": "Privado", "repo": PRIVADO, "token": "no-existe.token"},
+        # Sin credencial que lo alcance: el caso del runner del CI, donde
+        # `.credenciales/` no existe. Se lo fuerza acá, así se ejercita igual
+        # en la Mac. Cuál es el repositorio se decidió arriba, midiendo.
+        ("un repositorio que no se alcanza sin credencial",
+         {"nombre": "Inalcanzable", "repo": PRIVADO, "token": "no-existe.token"},
          "github.com"),
     ]
+
+    # La aserción que hace que el caso de arriba no sea vacuo. Sin ella, el día
+    # que ese repositorio se vuelva público las cuatro aserciones de su caso
+    # empiezan a mentir y nadie se entera; con ella, se pone roja acá.
+    af("el caso «no se alcanza sin credencial» se ejercita contra un "
+       "repositorio que de verdad no se alcanza — medido, no supuesto",
+       not alcanzable_sin_credencial(PRIVADO), PRIVADO)
+    if PRIVADO != DECLARADO_PRIVADO:
+        print("       nota: %s se lee sin credencial —es público— así que el "
+              "caso va contra %s" % (DECLARADO_PRIVADO, PRIVADO))
 
     def fallar(p, i):
         """Leer con espejo vacío y sin ninguna credencial a mano."""
