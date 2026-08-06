@@ -32,10 +32,26 @@ correr() {
 }
 
 echo
-for f in verificar-lector.py verificar-angosto.py; do
+for f in verificar-lector.py verificar-angosto.py verificar-credenciales.py; do
   [ -f "pruebas/$f" ] && correr "$f" python3; done
 for f in verificar-contrato.sh; do
   correr "$f" bash; done
+
+# El arnés de la pantalla corre el JavaScript de `capataz.html` de verdad, así
+# que necesita node. **Si node no está, esto es una falla y no un salteo**: un
+# arnés que no corre no verifica nada, y la forma en que eso se nota es que el
+# total baja. El aviso dice qué instalar para que no haya que leer el script.
+if [ -z "$filtro" ] || [[ "verificar-pantalla.js" == *"$filtro"* ]]; then
+  if command -v node >/dev/null 2>&1; then
+    correr "verificar-pantalla.js" node
+  else
+    fallaron="$fallaron verificar-pantalla.js"
+    printf '  \033[31m✗\033[0m %-30s %4s aserciones  %s\n' \
+      "verificar-pantalla.js" "0" "no hay node"
+    printf '        node no está instalado: el JavaScript de capataz.html no se ejecuta,\n'
+    printf '        y la regla 3 («no sé» nunca verde) queda sin verificar en la pantalla.\n'
+  fi
+fi
 
 echo
 if [ -n "$fallaron" ]; then
