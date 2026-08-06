@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<!-- El requisito que motiva el proyecto: esto se lee desde un teléfono. Sin
+     este meta, un móvil dibuja a 980 px y después achica: todo entra y nada se
+     lee. `pruebas/verificar-angosto.py` § 1 se pone rojo si desaparece. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>capataz</title>
+<style>
+/* ---------------------------------------------------------------------------
+   Angosto primero, y sin excepciones.
+
+   La medida de referencia es 360 px: lo importante tiene que entrar SIN scroll
+   horizontal y SIN zoom. Las tres reglas que lo garantizan y que el arnés
+   vigila una por una:
+
+     1. ningún ancho fijo mayor a 360 px en toda la hoja;
+     2. `overflow-wrap: anywhere` en todo lo que lleve texto de otro proyecto
+        —los títulos de los puntos traen rutas y `código` sin espacios, que es
+        exactamente lo que desborda—;
+     3. ni un `<table>`: una tabla de cinco columnas no entra en 360 px de
+        ninguna forma. Todo son filas apiladas que envuelven.
+--------------------------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; max-width: 100%; overflow-x: hidden; }
+body {
+  background: #12141a; color: #e6e8ee;
+  font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  padding: 10px 10px 40px; overflow-wrap: anywhere; word-break: break-word;
+}
+.hoja { max-width: 340px; margin: 0 auto; }
+@media (min-width: 700px) { .hoja { max-width: 640px; } }
+
+h1 { font-size: 17px; margin: 0 0 2px; letter-spacing: .5px; }
+h2 { font-size: 16px; margin: 0 0 2px; }
+h3 { font-size: 12px; margin: 12px 0 5px; text-transform: uppercase;
+     letter-spacing: .8px; color: #8b93a7; font-weight: 600; }
+.tenue { color: #8b93a7; font-size: 12px; }
+.muy-tenue { color: #6b7387; font-size: 11px; }
+
+.tarjeta { background: #1b1e27; border: 1px solid #2a2f3d; border-radius: 10px;
+           padding: 12px; margin: 12px 0; }
+
+/* Los números por estado. Envuelven; nunca hacen una fila más ancha que la
+   pantalla. Y van los CINCO, con los ceros: «pendiente 12» no dice nada al
+   lado de «pendiente 12 · en curso 0». */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0; }
+.chip { display: inline-flex; align-items: baseline; gap: 5px;
+        padding: 4px 8px; border-radius: 7px; font-size: 12px;
+        background: #232837; border: 1px solid #2f3648; }
+.chip b { font-size: 15px; font-variant-numeric: tabular-nums; }
+.chip.cero { opacity: .45; }
+.e-pendiente  { border-color: #6b5a1e; background: #2b2512; }
+.e-encurso    { border-color: #1e4f6b; background: #12232b; }
+.e-hecho      { border-color: #245c34; background: #12251a; }
+.e-diferido   { border-color: #3a3f52; }
+.e-descartado { border-color: #3a3f52; }
+.e-sinestado  { border-color: #6b1e4a; background: #2b1220; }
+.e-pablo      { border-color: #7a3b1a; background: #2e1a10; }
+
+/* «No sé» tiene su propia pinta y NO es verde. Regla 3 de CLAUDE.md: un
+   tablero que miente en el caso que importa es peor que no tenerlo. */
+.nose { border-style: dashed; border-color: #55607a; background: transparent;
+        color: #98a2b8; }
+.rojo  { border-color: #7a2020; background: #2a1212; color: #ffc9c9; }
+.verde { border-color: #245c34; background: #12251a; color: #b6f0c6; }
+
+ul { list-style: none; margin: 0; padding: 0; }
+li { padding: 7px 0; border-top: 1px solid #262b38; }
+li:first-child { border-top: 0; }
+.id { font: 600 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: #cfd5e4; background: #262c3b; padding: 3px 6px; border-radius: 5px;
+      display: inline-block; margin-right: 6px; }
+.titulo { font-size: 13px; }
+.meta { font-size: 11px; color: #8b93a7; margin-top: 3px; }
+.viejo .meta { color: #f0b46a; }
+.nada { font-size: 12px; color: #6b7387; padding: 6px 0; }
+
+details { margin-top: 6px; }
+summary { font-size: 11px; color: #8b93a7; cursor: pointer; }
+details p { font-size: 11px; color: #8b93a7; margin: 5px 0 0; }
+.pie { text-align: center; margin-top: 20px; }
+</style>
+</head>
+<body>
+<div class="hoja">
+  <h1>capataz</h1>
+  <div class="tenue" id="cabecera">leyendo…</div>
+  <div id="cuerpo"></div>
+  <div class="pie muy-tenue">
+    Capataz sólo lee. El SEGUIMIENTO de cada proyecto es la verdad; git es el árbitro.
+  </div>
+</div>
+<!--DATOS-INCRUSTADOS-->
+<script>
+"use strict";
+var ESTADOS = ["pendiente", "en curso", "hecho", "diferido", "descartado"];
+var CLASE = {
+  "pendiente": "e-pendiente", "en curso": "e-encurso", "hecho": "e-hecho",
+  "diferido": "e-diferido", "descartado": "e-descartado",
+  "sin estado": "e-sinestado"
+};
+
+function esc(t) {
+  return String(t === null || t === undefined ? "" : t)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function chip(etiqueta, valor, clase) {
+  var cero = (valor === 0) ? " cero" : "";
+  return '<span class="chip ' + clase + cero + '"><b>' + esc(valor) + '</b>' +
+         esc(etiqueta) + '</span>';
+}
+
+/* El chip de un dato que no se pudo leer. Nunca verde, nunca cero: un cero se
+   lee como «no hay» y esto es «no sé», que es otra cosa. */
+function chipNoSe(etiqueta) {
+  return '<span class="chip nose">' + esc(etiqueta) + ' · no sé</span>';
+}
+
+function antiguedad(dias) {
+  if (dias === null || dias === undefined) return "desde cuándo: no sé";
+  if (dias === 0) return "desde hoy";
+  return "hace " + dias + (dias === 1 ? " día" : " días");
+}
+
+function listaPuntos(puntos, umbralViejo) {
+  if (!puntos.length) return '<div class="nada">ninguno</div>';
+  var h = "<ul>";
+  for (var i = 0; i < puntos.length; i++) {
+    var p = puntos[i];
+    var viejo = (umbralViejo !== undefined && p.dias !== null &&
+                 p.dias >= umbralViejo) ? " viejo" : "";
+    h += '<li class="' + viejo + '">' +
+         '<span class="id">' + esc(p.id) + '</span>' +
+         '<span class="titulo">' + esc(p.titulo.slice(0, 150)) + '</span>' +
+         '<div class="meta">' + (p.quien ? esc(p.quien) + " · " : "") +
+         esc(antiguedad(p.dias)) + '</div></li>';
+  }
+  return h + "</ul>";
+}
+
+function bloqueCuadrilla(pr) {
+  var h = "<h3>La cuadrilla ahora</h3>";
+  if (!pr.cuadrilla.length) {
+    h += '<div class="nada">nadie trabajando</div>';
+  } else {
+    h += "<ul>";
+    for (var i = 0; i < pr.cuadrilla.length; i++) {
+      var a = pr.cuadrilla[i];
+      h += '<li><span class="id">' + esc(a.quien) + '</span>' +
+           '<span class="titulo">' + esc(a.que) + '</span>' +
+           '<div class="meta">' + esc(a.rol || "sin rol") + ' · hace ' +
+           esc(a.hace_min) + ' min</div></li>';
+    }
+    h += "</ul>";
+  }
+  /* El reparto va SIEMPRE, con los ceros incluidos: «coder 3 · reviewer 0» es
+     la frase que hace que alguien haga algo; «coder 3» no dice nada. */
+  h += '<div class="chips">';
+  for (var j = 0; j < pr.por_rol.reparto.length; j++) {
+    var r = pr.por_rol.reparto[j];
+    h += chip(r.rol, r.cuantos, r.cuantos ? "e-encurso" : "");
+  }
+  h += "</div>";
+  if (!pr.por_rol.conocidos) {
+    h += '<div class="chips">' + chipNoSe("qué roles existen") + '</div>' +
+         '<div class="muy-tenue">Este proyecto no tiene <code>ops/60-roles.md</code>, ' +
+         'así que la lista de roles no se sabe. No se inventa la de otro proyecto.</div>';
+  }
+  return h;
+}
+
+function bloqueRamas(pr) {
+  var h = "<h3>Ramas</h3>";
+  if (pr.ramas === null) {
+    return h + '<div class="chips">' + chipNoSe("ramas") + '</div>' +
+           '<div class="muy-tenue">No es un repositorio git, así que no hay ramas ' +
+           'que mirar ni total que comparar.</div>';
+  }
+  if (!pr.ramas.length) return h + '<div class="nada">ninguna</div>';
+  h += "<ul>";
+  for (var i = 0; i < pr.ramas.length; i++) {
+    var r = pr.ramas[i];
+    var tot;
+    if (r.total === null) {
+      tot = chipNoSe("aserciones");
+    } else if (r.delta === null) {
+      tot = chip("aserciones", r.total, "");
+    } else if (r.delta < 0) {
+      /* Una rama que BAJA el total es sospechosa aunque esté verde: un arnés
+         que dejó de encontrar lo que mira no se pone rojo, saltea en silencio
+         y lo único que cambia es la cuenta. */
+      tot = chip("aserciones (" + r.delta + " vs main)", r.total, "rojo");
+    } else {
+      tot = chip("aserciones (+" + r.delta + " vs main)", r.total, "verde");
+    }
+    h += '<li><span class="id">' + esc(r.nombre) + '</span>' +
+         (r.punto ? '<span class="titulo">punto ' + esc(r.punto) + '</span>' : '') +
+         '<div class="chips">' + tot + '</div>' +
+         '<div class="meta">' + esc(r.fecha) + ' · ' + esc(r.autor) +
+         (r.commits_adelante === null ? '' :
+          ' · ' + esc(r.commits_adelante) + ' adelante / ' +
+          esc(r.commits_atras) + ' atrás de main') + '</div>' +
+         '<div class="meta">' + esc(r.asunto) + '</div></li>';
+  }
+  return h + "</ul>";
+}
+
+function bloqueCI(pr) {
+  var e = pr.ci.estado;
+  var clase = e === "verde" ? "verde" : (e === "rojo" ? "rojo" : "nose");
+  var h = '<h3>CI</h3><div class="chips"><span class="chip ' + clase + '">CI · ' +
+          esc(e) + "</span></div>";
+  if (pr.ci.motivo) {
+    h += '<details><summary>por qué no se sabe</summary><p>' +
+         esc(pr.ci.motivo) + "</p></details>";
+  }
+  return h;
+}
+
+function tarjeta(pr) {
+  var h = '<div class="tarjeta"><h2>' + esc(pr.nombre) + "</h2>" +
+          '<div class="muy-tenue">' + esc(pr.ruta) + " · " +
+          esc(pr.seguimiento.archivo) + "</div>";
+
+  if (!pr.seguimiento.existe) {
+    return h + '<div class="chips"><span class="chip rojo">no encuentro el ' +
+           'seguimiento</span></div><div class="muy-tenue">' +
+           esc(pr.seguimiento.error) + "</div></div>";
+  }
+
+  h += "<h3>Puntos abiertos</h3><div class=\"chips\">";
+  for (var i = 0; i < ESTADOS.length; i++) {
+    h += chip(ESTADOS[i], pr.cuenta_abiertos[ESTADOS[i]], CLASE[ESTADOS[i]]);
+  }
+  if (pr.cuenta_abiertos["sin estado"]) {
+    h += chip("sin estado", pr.cuenta_abiertos["sin estado"], CLASE["sin estado"]);
+  }
+  h += "</div>";
+  h += '<div class="muy-tenue">y ' + esc(pr.cuenta_total["hecho"]) +
+       " hechos en toda la historia del archivo</div>";
+
+  h += "<h3>Te bloquean a vos · pendiente (Pablo)</h3>" +
+       '<div class="chips">' +
+       chip("puntos", pr.pendientes_de_pablo.length, "e-pablo") + "</div>" +
+       listaPuntos(pr.pendientes_de_pablo, 7);
+
+  h += "<h3>En curso</h3>" + listaPuntos(pr.en_curso, 3);
+
+  h += bloqueCuadrilla(pr);
+  h += bloqueRamas(pr);
+  h += bloqueCI(pr);
+
+  var rep = pr.seguimiento.repetidos.filter(function (r) { return r.discrepa; });
+  if (rep.length) {
+    h += "<h3>El mismo punto, dos estados</h3><ul>";
+    for (var k = 0; k < rep.length; k++) {
+      h += '<li><span class="id">' + esc(rep[k].id) + "</span>" +
+           '<span class="titulo">' + esc(rep[k].estado) + " en una fila, " +
+           esc(rep[k].choca_con) + " en otra</span></li>";
+    }
+    h += "</ul>";
+  }
+  return h + "</div>";
+}
+
+function pintar(d) {
+  document.getElementById("cabecera").textContent =
+    d.cuando + " · " + d.proyectos.length + " proyecto" +
+    (d.proyectos.length === 1 ? "" : "s") + " vigilado" +
+    (d.proyectos.length === 1 ? "" : "s");
+  var h = "";
+  if (d.sin_proyectos) {
+    h = '<div class="tarjeta"><h2>Ningún proyecto vigilado</h2>' +
+        '<div class="tenue">Agregá uno en <code>proyectos.json</code>: la ruta y ' +
+        'el nombre de su archivo de seguimiento, porque no todos se llaman igual.</div></div>';
+  }
+  for (var i = 0; i < d.proyectos.length; i++) h += tarjeta(d.proyectos[i]);
+  document.getElementById("cuerpo").innerHTML = h;
+}
+
+function traer() {
+  fetch("/api/estado", { cache: "no-store" })
+    .then(function (r) { return r.json(); })
+    .then(pintar)
+    .catch(function (e) {
+      document.getElementById("cabecera").textContent =
+        "no llego al servidor: " + e;
+    });
+}
+
+if (window.CAPATAZ_DATOS) {
+  /* Instantánea estática: los datos vienen incrustados y no hay a quién
+     preguntarle. Es lo que se abre con `file://` para mirar el ancho angosto. */
+  pintar(window.CAPATAZ_DATOS);
+} else {
+  traer();
+  setInterval(traer, 15000);
+}
+</script>
+</body>
+</html>

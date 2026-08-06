@@ -42,4 +42,19 @@ if [ -n "$fallaron" ]; then
   printf '  \033[31m%s aserciones · %s rojas\033[0m —%s\n\n' "$verdes" "$rojas" "$fallaron"
   exit 1
 fi
+
+# El total **medido**, dejado donde otro lo pueda leer.
+#
+# Es la mitad que le faltaba a «el total de aserciones es parte del resultado»:
+# hasta acá el total se imprimía y se perdía, así que comparar una rama con
+# `main` obligaba a correr las dos suites, o a creerle a un número escrito a
+# mano en una celda del seguimiento. Ahora queda versionado, y capataz lo lee
+# con `git show <rama>:pruebas/total-aserciones.txt` sin correr nada de nadie.
+#
+# Sólo se escribe cuando está todo verde: un total al lado de una roja no es un
+# total, es la mitad de uno. Y sólo si cambió, para no ensuciar el árbol.
+if [ ! -f pruebas/total-aserciones.txt ] || \
+   [ "$(cat pruebas/total-aserciones.txt 2>/dev/null)" != "$verdes" ]; then
+  printf '%s\n' "$verdes" > pruebas/total-aserciones.txt
+fi
 printf '  \033[32m%s aserciones en verde\033[0m\n\n' "$verdes"

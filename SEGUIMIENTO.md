@@ -55,23 +55,33 @@ la máquina de alguien y no está en `main` está abierto.
 
 ## Abierto ahora
 
-*(vacío — este archivo nace antes que el código, que es el punto del andamio:
-`ERP360-Template/documentacion/andamio-proyecto-nuevo.md`, «El orden»)*
+Lo único que hay que mirar para saber qué falta. El detalle de cada punto está
+más abajo, en la tanda donde nació.
 
 ### Depende de una decisión (Pablo)
 
 | # | Qué falta | Desde | Estado |
 |---|---|---|---|
+| D1 | **Mirar la pantalla en un teléfono de verdad.** Está verificado que las condiciones para 360 px se cumplen —`verificar-angosto.py` § 1 calcula 340 + 2×10 = 360— pero *mirar* no se pudo: en el contenedor de un agente no hay Chromium ni Playwright. `./run.sh --instantanea` deja un `_instantanea.html` que se abre con `file://` desde la Mac. Es de Pablo porque el navegador está de ese lado | 2026-08-06 | pendiente (Pablo) |
+| D2 | **El repositorio `github.com/pablosilveira16/capataz`.** La plomería está hecha y verificada (T1); falta el repo vacío y el token *fine-grained* con `Contents: Read and write` + `Metadata: Read-only` + **`Workflows: Read and write`** —el que a ERP 360 le faltó y rechazó el push entero— en `../.credenciales/github-capataz.token`, `chmod 600`. Los pasos exactos están en `ops/70-credenciales.md` | 2026-08-06 | pendiente (Pablo) |
+| D3 | **Hasta dónde llega capataz.** Hoy es un visor y `CLAUDE.md` § 1 dice que no decide ni lanza nada. La orquestación —convocar un agente, asignarle un punto— es el paso siguiente y **cambia la regla que manda**: en el momento en que capataz marque un punto `en curso`, deja de ser sólo lector. Se decide cuando la lectura esté rodada, no antes | 2026-08-06 | pendiente (Pablo) |
 
 ### Se puede hacer sin preguntar
 
 | # | Qué falta | Desde | Estado |
 |---|---|---|---|
+| T2 | **Ni ERP 360 ni Finca 360 dejan el total de aserciones medido**, así que capataz muestra «no sé» en todas sus ramas — que es lo correcto y también es inútil. El arreglo son tres líneas en el `verificar.sh` de cada uno, las mismas que ya tiene el de capataz: escribir el total en `pruebas/total-aserciones.txt` sólo cuando está todo verde. Es trabajo **en el repo de ellos**, no acá | 2026-08-06 | pendiente |
+| T3 | **Un `en curso` sin fecha no dice hace cuánto.** El lector saca la antigüedad de la columna `Desde`, que es la fecha en que nació el punto y no la de la toma. Un punto tomado hoy que nació hace un mes se ve como un `en curso` de treinta días. La fecha de la toma está en dos lugares que capataz ya alcanza: la marca de `panel/agentes.jsonl` y el commit del `--tomar`. Falta cruzarlas | 2026-08-06 | pendiente |
+| T4 | **Un proyecto cuyas tablas de puntos no tengan columna `#` se lee como vacío**, en silencio. Hoy se cuenta en `tablas_ignoradas` y no se muestra: mostrarlo siempre sería el aviso que sale siempre. Falta la forma que avise **sólo cuando importa** —cero puntos leídos y una tabla ignorada— y un arnés que lo vea rojo | 2026-08-06 | pendiente |
+| T5 | **El CI se puede leer desde la Mac y no desde el contenedor.** `interpretar_ci()` ya existe y está verificada con las cinco respuestas; lo que falta es quién le pasa la respuesta. Va detrás de una variable de entorno, y **sin ella el resultado se queda en «no sé»**, nunca en verde | 2026-08-06 | pendiente |
+| T6 | **Capataz no tiene CI.** ERP 360 corre `./verificar.sh` en un workflow; acá no hay ninguno. Es barato y es la única forma de que el total se mire solo | 2026-08-06 | pendiente |
 
 ### Decidido, esperando el momento
 
 | # | Qué | Desde | Hasta cuándo | Estado |
 |---|---|---|---|---|
+| X1 | **Que capataz muestre el CI de verdad en el tablero.** El mecanismo está (T5); lo que falta es dónde corre capataz | 2026-08-06 | que se decida D3 | diferido |
+| X2 | **Despliegue.** Hoy corre en `127.0.0.1:5402` con el servidor de la biblioteca estándar, que no va a producción. Y para leerlo desde el teléfono hace falta que llegue desde afuera de la Mac, que es una decisión de red antes que de código | 2026-08-06 | que se decida D3 | diferido |
 
 ---
 
@@ -84,9 +94,18 @@ saber qué falta no hace falta leerlo**: está todo arriba.
 
 ## Tanda 0 — el andamio y el lector, 2026-08-06
 
+El proyecto arranca siguiendo al pie el orden de
+`ERP360-Template/documentacion/andamio-proyecto-nuevo.md`, § «El orden». Los
+cuatro primeros puntos son el andamio y **ninguno toca la aplicación**; el
+código empieza en el A5.
+
 | # | Punto | Estado |
 |---|---|---|
-| A1 | Este seguimiento, con el contrato y los cinco estados | en curso (coder-1) |
-| A2 | `verificar.sh` y el primer arnés, antes del primer commit | pendiente |
-| A3 | `git init` y el primer commit, **antes de la primera línea de la app** | pendiente |
-| A4 | `CLAUDE.md` con tres reglas — no diez | pendiente |
+| A1 | Este seguimiento, con el contrato y los cinco estados, **vacío** | **hecho** · `verificar-contrato.sh` 10 aserciones — commit `eb6a341` |
+| A2 | `verificar.sh` y un arnés que verifique lo más tonto que se me ocurra | **hecho** · `verificar-contrato.sh` 10 aserciones — visto en rojo con un estado inventado |
+| A3 | `git init` y el primer commit, **antes de la primera línea de la app** | **hecho** · `verificar-contrato.sh` 10 aserciones — commit `eb6a341`, y `core.filemode true` puesto desde el día cero |
+| A4 | `CLAUDE.md` con tres reglas — no diez | **hecho** · `verificar-angosto.py` 25 aserciones — 72 de 72 líneas, commit `f968fa6` |
+| A5 | `lector.py`: los dos formatos de seguimiento, los roles, la cuadrilla, las ramas y el CI | **hecho** · `verificar-lector.py` 81 aserciones — proyectos de verdad armados en `/tmp` |
+| A6 | `capataz.py` y `capataz.html` en el 5402, sin dependencias | **hecho** · `verificar-angosto.py` 25 aserciones — se ejecuta `render_estatico()` y se mira el HTML producido |
+| A7 | `ops/`, con la marcha atrás **antes** que el despliegue | **hecho** · `verificar-angosto.py` 25 aserciones — el puerto del mapa y el de `capataz.py` son el mismo |
+| T1 | La plomería para empujar a GitHub, traída de ERP 360 y adaptada | **hecho** · `verificar-credenciales.py` 26 aserciones — el helper se ejecuta de verdad |

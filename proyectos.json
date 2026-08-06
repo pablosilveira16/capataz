@@ -1,0 +1,54 @@
+{
+  "_leeme": [
+    "Los proyectos que capataz vigila. Es lo único configurable, y es texto:",
+    "lo binario no se revisa en un diff.",
+    "",
+    "· ruta            relativa a esta carpeta. La misma carpeta está montada en",
+    "                  dos rutas distintas (la Mac y el contenedor de un agente),",
+    "                  así que una ruta absoluta deja andando a uno y roto al otro.",
+    "· seguimiento     el nombre del archivo, porque NO todos se llaman igual.",
+    "· roles           de dónde salen los tipos de agente. Si el archivo no está,",
+    "                  capataz dice «no sé» en vez de inventar la lista de seis.",
+    "· total_aserciones  el total MEDIDO que dejó ./verificar.sh. Si no está, la",
+    "                  pantalla dice «no sé»: un total escrito en prosa no vale.",
+    "· secciones       sólo para los seguimientos cuyas tablas NO tienen columna",
+    "                  Estado. Es interpretación de capataz sobre el archivo de",
+    "                  otro, así que se declara acá y no se esconde en el código."
+  ],
+  "proyectos": [
+    {
+      "nombre": "ERP 360",
+      "ruta": "../ERP360-Template",
+      "seguimiento": "SEGUIMIENTO.md",
+      "roles": "ops/60-roles.md",
+      "marcas": "panel/agentes.jsonl",
+      "total_aserciones": "pruebas/total-aserciones.txt",
+      "rama_principal": "main",
+      "secciones": {}
+    },
+    {
+      "nombre": "Finca 360",
+      "ruta": "../Finca360",
+      "seguimiento": "Finca360 — Seguimiento.md",
+      "roles": "ops/60-roles.md",
+      "marcas": "panel/agentes.jsonl",
+      "total_aserciones": "pruebas/total-aserciones.txt",
+      "rama_principal": "main",
+      "secciones": {
+        "Depende de Pablo": "pendiente (Pablo)",
+        "Se puede hacer sin preguntar": "pendiente",
+        "Decidido, esperando el momento": "diferido"
+      }
+    },
+    {
+      "nombre": "Capataz",
+      "ruta": ".",
+      "seguimiento": "SEGUIMIENTO.md",
+      "roles": "ops/60-roles.md",
+      "marcas": "panel/agentes.jsonl",
+      "total_aserciones": "pruebas/total-aserciones.txt",
+      "rama_principal": "main",
+      "secciones": {}
+    }
+  ]
+}
