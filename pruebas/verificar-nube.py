@@ -67,6 +67,27 @@ def af(descripcion, condicion, detalle=""):
         print("ROJA  %s%s" % (descripcion, ("  →  %s" % detalle) if detalle else ""))
 
 
+def diferencias(a, b, ruta=""):
+    """Los caminos donde dos vistas difieren, con el nombre del campo.
+
+    Comparar dos JSON como cadenas contesta «algo cambió», que en una vista de
+    cuarenta campos no alcanza para saber si lo que cambió está bien. Esto
+    contesta **cuál**, y por eso la aserción puede ser exacta —«sólo este
+    campo»— en vez de tener que aflojarse a «casi lo mismo».
+    """
+    if isinstance(a, dict) and isinstance(b, dict):
+        salida = []
+        for k in sorted(set(a) | set(b)):
+            salida += diferencias(a.get(k), b.get(k), "%s/%s" % (ruta, k))
+        return salida
+    if isinstance(a, list) and isinstance(b, list) and len(a) == len(b):
+        salida = []
+        for i in range(len(a)):
+            salida += diferencias(a[i], b[i], "%s/%d" % (ruta, i))
+        return salida
+    return [] if a == b else [ruta or "/"]
+
+
 def igual(descripcion, obtenido, esperado):
     af(descripcion, obtenido == esperado, "obtuve %r, esperaba %r" % (obtenido, esperado))
 
@@ -366,23 +387,56 @@ try:
         shutil.rmtree(carpeta)
         af("borrado", not os.path.isdir(carpeta))
         de_nuevo = lector.mirar(proy, nube.leer(proy, base=BASE, ahora=HOY), HOY)
-        igual("borrar el espejo entero y volver a leer da exactamente lo mismo",
-              json.dumps(primera, sort_keys=True, default=str),
-              json.dumps(de_nuevo, sort_keys=True, default=str))
+        # Se comparan los CAMINOS que difieren y no dos cadenas: así la
+        # aserción dice **qué** cambió en vez de «algo cambió», y no se puede
+        # aflojar sin que se note. Lo único que puede cambiar es la marca de
+        # cuándo se trajo el espejo —un hecho del espejo, no un dato de
+        # GitHub—: un clon nuevo se acaba de traer. Cualquier otro camino en
+        # esta lista significa que un dato vivía sólo adentro del espejo, que
+        # es exactamente lo que la regla 1 prohíbe.
+        igual("borrar el espejo entero y volver a leer da lo mismo, salvo "
+              "cuándo se lo trajo",
+              diferencias(primera, de_nuevo), ["/nube/traido_en"])
 
         # Y el camino del `fetch`, que es el que corre siempre después de la
         # primera vez: con `refresco=0` se fuerza y tiene que dar lo mismo.
         refrescado = lector.mirar(
             proy, nube.leer(proy, base=BASE, ahora=HOY, refresco=0), HOY)
         igual("refrescar un espejo que ya estaba también da lo mismo",
-              json.dumps(primera, sort_keys=True, default=str),
-              json.dumps(refrescado, sort_keys=True, default=str))
+              diferencias(primera, refrescado), ["/nube/traido_en"])
         af("y capataz no escribió nada afuera de su carpeta de espejos",
            sorted(os.listdir(BASE)) ==
            sorted([os.path.basename(nube.carpeta_de(p["repo"], BASE))
                    for p in con_repo
                    if os.path.isdir(nube.carpeta_de(p["repo"], BASE))]),
            sorted(os.listdir(BASE)))
+
+    # -----------------------------------------------------------------------
+    print("§ 5b · Leer el espejo NO es hablar con GitHub")
+    # -----------------------------------------------------------------------
+    #
+    # La pantalla muestra hace cuánto se leyó GitHub, y esa frescura tiene que
+    # ser la del `fetch` y no la del vistazo al espejo: el espejo se lee en
+    # **cada** pedido de la pantalla —una vez por segundo— y la red se toca cada
+    # `REFRESCO`. Con la marca equivocada el tablero decía «GitHub leído hace
+    # 1 s» para siempre, que es la regla 3 rota justo en el dato que dice si
+    # creerle al resto de la pantalla.
+    if datos["ok"]:
+        uno = nube.leer(proy, base=BASE, ahora=HOY)
+        af("una lectura deja la marca de cuándo se habló con GitHub",
+           uno.get("traido_en") is not None)
+        dos = nube.leer(proy, base=BASE, ahora=HOY + 5)
+        igual("volver a leer el espejo NO mueve esa marca: no se fue a la red",
+              dos["traido_en"], uno["traido_en"])
+        af("y en cambio sí mueve la de cuándo se leyó — son dos cosas distintas "
+           "y confundirlas es lo que hacía que la pantalla dijera «hace 1 s» "
+           "aunque el último fetch fuera de hace quince segundos",
+           dos["leido_en"] > uno["leido_en"],
+           (uno["leido_en"], dos["leido_en"]))
+        tres = nube.leer(proy, base=BASE, ahora=HOY, refresco=0)
+        af("forzar el refresco sí la mueve para adelante: eso es hablar con "
+           "GitHub", tres["traido_en"] >= uno["traido_en"],
+           (uno["traido_en"], tres["traido_en"]))
 
     # -----------------------------------------------------------------------
     print("§ 6 · El CI — lo grabado, y lo que sí se puede probar acá")

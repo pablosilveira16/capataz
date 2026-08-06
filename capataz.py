@@ -28,6 +28,7 @@ El puerto es el **5402**. Los vecinos ocupados están en `ops/00-mapa.md`: 5300,
 import io
 import json
 import os
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -44,14 +45,28 @@ PAGINA = os.path.join(AQUI, "capataz.html")
 PUERTO_POR_DEFECTO = 5402
 PUERTO = int(os.environ.get("CAPATAZ_PUERTO", PUERTO_POR_DEFECTO))
 
-# La pantalla se refresca sola cada 15 s. Esta caché es de la vista armada; la
-# que decide cada cuánto se le vuelve a preguntar a GitHub es `nube.REFRESCO`,
-# y son dos cosas distintas: armar la vista es gratis, salir a la red no.
+# Tres relojes distintos, y confundirlos es cómo se hace un tablero que miente:
 #
-# Las dos son fotos de hace un rato y ninguna es un estado: se descartan
-# enteras y se vuelven a leer. Capataz no guarda nada que no esté en GitHub.
-CACHE_SEG = 5
+#   1 s   la pantalla repinta y los contadores avanzan. No sale a ningún lado:
+#         el tiempo pasa igual y eso se puede afirmar sin preguntarle a nadie.
+#   2 s   la pantalla le pide `/api/estado` a este servidor. Barato: armar la
+#         vista salió medido 0,008 s.
+#  15 s   este servidor le pregunta a GitHub (`nube.REFRESCO`). Medido el
+#         2026-08-06: 1,2 s por repositorio, así que a 15 s son ~16% del
+#         tiempo haciendo `git fetch` y no más.
+#
+# Bajar el tercero es lo único que hace que un agente se vea más rápido, y es
+# el único que cuesta. Por eso la pantalla muestra **hace cuánto se leyó
+# GitHub** y no sólo la hora: un contador de un segundo sobre datos de hace un
+# minuto es exactamente el tablero que miente en el caso que importa.
+CACHE_SEG = 1
 _cache = {"ts": 0.0, "datos": None}
+
+# Con la pantalla pidiendo cada 2 s y un refresco que tarda ~2,4 s, dos pedidos
+# se pisan: los dos ven la caché vencida y los dos salen a hacer `git fetch`
+# sobre el mismo espejo. El candado deja que salga uno y que el otro espere su
+# resultado — sin él, git compite consigo mismo por el lock del repositorio.
+_candado = threading.Lock()
 
 
 def _mirar(proy, ahora):
@@ -75,19 +90,36 @@ def estado():
     ahora = time.time()
     if _cache["datos"] is not None and ahora - _cache["ts"] < CACHE_SEG:
         return _cache["datos"]
-    proyectos = lector.leer_proyectos(PROYECTOS)
-    datos = {
-        "ahora": ahora,
-        "cuando": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "config": PROYECTOS,
-        "puerto": PUERTO,
-        "espejos": nube.ESPEJOS,
-        "proyectos": [_mirar(p, ahora) for p in proyectos],
-        "sin_proyectos": not proyectos,
-    }
-    _cache["ts"] = ahora
-    _cache["datos"] = datos
-    return datos
+    with _candado:
+        # Adentro del candado se vuelve a mirar: el que esperó no tiene que
+        # repetir el `git fetch` que acaba de hacer el que entró primero.
+        ahora = time.time()
+        if _cache["datos"] is not None and ahora - _cache["ts"] < CACHE_SEG:
+            return _cache["datos"]
+        proyectos = lector.leer_proyectos(PROYECTOS)
+        vistas = [_mirar(p, ahora) for p in proyectos]
+        datos = {
+            "ahora": ahora,
+            "cuando": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "config": PROYECTOS,
+            "puerto": PUERTO,
+            "espejos": nube.ESPEJOS,
+            # La vista primaria: la cuadrilla de todos los proyectos junta y
+            # ordenada por quién se movió recién. Va arriba de `proyectos`
+            # porque es lo que se mira, no un resumen de lo de abajo.
+            "agentes": lector.agentes(vistas, ahora),
+            # Los umbrales viajan **una vez y desde acá**. La pantalla vuelve a
+            # decidir el estado a cada segundo, y si los copiara tendría los
+            # mismos dos números en dos lugares sin ninguna regla sobre cuál
+            # gana — el bug que este proyecto tiene escrito como regla 1.
+            "umbrales": {"fresco": lector.FRESCO, "tibio": lector.TIBIO},
+            "refresco_nube": nube.REFRESCO,
+            "proyectos": vistas,
+            "sin_proyectos": not proyectos,
+        }
+        _cache["ts"] = ahora
+        _cache["datos"] = datos
+        return datos
 
 
 class Capataz(BaseHTTPRequestHandler):

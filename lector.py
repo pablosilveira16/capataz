@@ -484,6 +484,10 @@ def cuadrilla(ramas, puntos, ahora=None):
             "estado": e,
             "desde": r.get("ts"),
             "hace_seg": _hace(r.get("ts"), ahora),
+            # El sha es lo que hace visible que un agente **se despertó**: la
+            # pantalla compara el de una lectura con el de la anterior y lo que
+            # cambió es un empujón nuevo, no un reloj que avanzó.
+            "sha": r.get("sha") or "",
         })
     for p in (puntos or ()):
         if p.get("estado") != "en curso":
@@ -501,10 +505,37 @@ def cuadrilla(ramas, puntos, ahora=None):
             "estado": "sin rama",
             "desde": None,
             "hace_seg": None,
+            "sha": "",
         })
     # El que hace más que no se mueve, primero: es el que hay que mirar.
     return sorted(vivos, key=lambda v: (v["hace_seg"] is None,
                                         -(v["hace_seg"] or 0)))
+
+
+def agentes(vistas, ahora=None):
+    """La cuadrilla de **todos** los proyectos en una sola lista.
+
+    Es la vista primaria: lo que se mira no es «cómo va el proyecto X» sino
+    **quién está trabajando ahora mismo**, y un agente no se busca adentro de
+    la tarjeta del proyecto que le tocó.
+
+    **El orden es al revés que el de `cuadrilla()`, y a propósito.** Ahí manda
+    el que hace más que no se mueve, porque esa lista se lee para decidir a
+    quién hay que ir a buscar. Acá manda **el que se movió recién**, porque
+    esta lista se mira en vivo: un agente que empuja salta al primer renglón y
+    ese salto es el que se quiere ver. El que no tiene rama —`sin rama`, del
+    que no llegó ni un commit— no tiene con qué ordenarse y va último.
+    """
+    ahora = time.time() if ahora is None else ahora
+    todos = []
+    for v in vistas or ():
+        for a in (v.get("cuadrilla") or ()):
+            d = dict(a)
+            d["proyecto"] = v.get("nombre") or ""
+            d["repo"] = v.get("repo") or ""
+            todos.append(d)
+    return sorted(todos, key=lambda a: (a["hace_seg"] is None,
+                                        a["hace_seg"] if a["hace_seg"] is not None else 0))
 
 
 # ----------------------------------------------------------------------------
@@ -621,6 +652,10 @@ def mirar(proy, repo, ahora=None):
             "rancio": bool(repo.get("rancio")),
             "sin_repo": bool(repo.get("sin_repo")),
             "leido_en": repo.get("leido_en"),
+            # Cuándo se habló con GitHub, que NO es cuándo se leyó el espejo:
+            # el espejo se lee en cada pedido de la pantalla y la red se toca
+            # cada `nube.REFRESCO`. La frescura que se muestra es ésta.
+            "traido_en": repo.get("traido_en"),
         },
         "seguimiento": {"archivo": proy["seguimiento"],
                         "existe": seg["existe"],

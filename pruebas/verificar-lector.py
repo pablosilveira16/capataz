@@ -426,6 +426,48 @@ igual("y de un nombre de persona no se deduce ninguno",
       lector.rol_de("Pablo Silveira"), "")
 
 # -----------------------------------------------------------------------
+print("§ 4b · Los agentes de TODOS los proyectos — la vista primaria")
+# -----------------------------------------------------------------------
+#
+# Lo que se mira no es «cómo va el proyecto X» sino quién trabaja ahora, y un
+# agente no se busca adentro de la tarjeta del proyecto que le tocó.
+OTRAS = [
+    rama("main", 60, adelante=0, principal=True, autor="coder-1", total=100),
+    rama("t9-recien", 30, autor="coder-8", total=100),
+]
+v_uno = lector.mirar(P_CON, repo_falso(ramas=[dict(r) for r in RAMAS]), HOY)
+v_dos = lector.mirar(dict(P_CON, nombre="El otro", repo="otro/repo"),
+                     repo_falso(ramas=[dict(r) for r in OTRAS]), HOY)
+todos = lector.agentes([v_uno, v_dos], HOY)
+
+igual("la lista junta la cuadrilla de los dos proyectos",
+      sorted(a["quien"] for a in todos),
+      ["coder-1", "coder-2", "coder-2", "coder-3", "coder-8",
+       "reviewer-1", "reviewer-1"])
+af("el mismo nombre en dos proyectos son DOS renglones y no uno: son dos "
+   "trabajos distintos, y unirlos escondería uno de los dos",
+   len([a for a in todos if a["quien"] == "coder-2"]) == 2)
+af("y se distinguen por el proyecto, que es lo que la pantalla usa de clave",
+   len(set(a["proyecto"] for a in todos if a["quien"] == "coder-2")) == 2)
+af("y cada agente dice de qué proyecto es, o no se sabe a quién ir a buscar",
+   all(a["proyecto"] for a in todos),
+   [(a["quien"], a["proyecto"]) for a in todos])
+igual("el que se movió recién va PRIMERO — al revés que la cuadrilla de un "
+      "proyecto, que pone primero al que hace más que no se mueve",
+      todos[0]["quien"], "coder-8")
+igual("y la cuadrilla de cada proyecto conserva su propio orden",
+      v_uno["cuadrilla"][0]["quien"], "coder-3")
+igual("el que no tiene rama va último: no tiene con qué ordenarse",
+      todos[-1]["estado"], "sin rama")
+af("cada agente lleva el sha de su rama, que es con lo que la pantalla ve que "
+   "se despertó — sin esto el aviso se apoyaría en el reloj y avisaría solo",
+   all(a["sha"] for a in todos if a["estado"] != "sin rama"),
+   [(a["quien"], a["sha"]) for a in todos])
+af("y el que no tiene rama no inventa un sha", todos[-1]["sha"] == "")
+af("sin proyectos, la lista está vacía y no explota",
+   lector.agentes([], HOY) == [] and lector.agentes(None, HOY) == [])
+
+# -----------------------------------------------------------------------
 print("§ 5 · Los roles del proyecto y el reparto")
 # -----------------------------------------------------------------------
 igual("los roles salen del ops/60-roles.md del repositorio, no de una lista de acá",

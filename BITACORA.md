@@ -605,3 +605,111 @@ escribir puntos sube el total. Es el punto T8, y esta tanda lo volvió a pagar.
 - **D5** — quedó reescrito: **el problema ya no es que capataz se quede ciego**
   —lee de GitHub— sino **qué borra las carpetas de la Mac**. Pasó dos veces en
   un día y la segunda se llevó una tanda a medio escribir.
+
+
+---
+
+# Tanda 3 — el visor por agente, en vivo
+
+*2026-08-06. El pedido, textual: «preciso que el primer visor sea por agente, y
+esto tiene que ser una app no un html estático, tiene que tener posiblemente un
+demoncito en js que esté actualizando una vez por segundo o una cosa así, así
+puedo ver en directo cuando un agente se despierta».*
+
+## Lo primero: capataz ya era una app
+
+La instantánea que se mandó al teléfono es una salida de escape —`run.sh
+--instantanea`, un `file://` para mirar el ancho angosto—, no la aplicación. La
+aplicación ya servía `/api/estado` y repintaba sola. Lo que **no** hacía era
+mirarse como algo vivo: repintaba cada 15 s, los contadores no se movían y la
+primera pantalla eran tres tarjetas de proyecto. El pedido no era cambiar de
+tecnología, era cambiar **qué se mira primero y cada cuánto**.
+
+## Los tres relojes, y por qué no son uno
+
+Un solo número —«actualizar una vez por segundo»— esconde tres cosas que cuestan
+distinto:
+
+| Reloj | Cada cuánto | Qué cuesta | Qué se gana |
+|---|---|---|---|
+| Repintar y volver a decidir el estado | 1 s | nada: no sale del navegador | el contador corre y el chip cambia **en el segundo justo** |
+| Pedir `/api/estado` | 2 s | 0,008 s de armar la vista | los datos nuevos llegan enseguida |
+| Preguntarle a GitHub | 15 s | **1,2 s de `git fetch` por repositorio** | es el único que hace que un agente aparezca antes |
+
+Medido el 2026-08-06 en la Mac, dos repositorios. El tercero bajó de 60 s a 15;
+más abajo no es gratis y lo que se gana es medio segundo de aviso.
+
+**Y el estado lo vuelve a decidir la pantalla, no el servidor.** Si el chip
+saliera cocinado del servidor, un agente que cruza los 45 minutos seguiría
+diciendo «trabajando» hasta la lectura siguiente. Por eso los umbrales viajan en
+el JSON: la pantalla los aplica a cada segundo y **no los tiene copiados** —los
+mismos dos números en dos lugares sin regla sobre cuál gana es la regla 1 de
+este proyecto, y es el bug más caro de Finca 360—.
+
+## «Se despertó» tiene que ser un empujón, no un reloj
+
+El aviso que se pidió —ver en directo cuando un agente se prende— es fácil de
+hacer mal: bastaría con marcar al que tenga el contador chico. Eso avisaría
+solo, siempre, y en dos días nadie lo miraría. La marca es **el sha**: cambió el
+último commit de su rama, o apareció una rama que no estaba. Y la primera
+lectura no marca a nadie, porque si no abrir la pantalla parecería que empujaron
+todos a la vez.
+
+## El que casi miente: «GitHub leído hace 1 s»
+
+Con el demonio andando, la línea de frescura decía **«GitHub leído hace 1 s»
+para siempre**, con un refresco de 15 s. La marca que estaba usando era
+`leido_en`, que es cuándo capataz miró su espejo — y eso pasa en cada pedido de
+la pantalla, o sea una vez por segundo. La marca de verdad la deja git en
+`FETCH_HEAD`, y es la que ahora viaja como `traido_en`.
+
+Es exactamente la regla 3 en el peor lugar posible: **el dato que dice si hay
+que creerle al resto de la pantalla**. Un contador que corre cada segundo sobre
+una lectura de hace un minuto no es un detalle de presentación; es el tablero
+mintiendo justo en el caso que importa. Corolario nuevo, del mismo tipo: si el
+servidor deja de contestar, la pantalla lo dice y apaga lo que muestra en vez de
+seguir pintándolo como si fuera de ahora.
+
+## Una aserción vieja que se puso roja con razón
+
+Poner `traido_en` en la vista rompió la aserción de que **el espejo es
+descartable**: se borra entero, se vuelve a leer y tiene que salir lo mismo. Y
+tenía razón — un clon nuevo se acaba de traer, así que esa marca cambia.
+
+La salida no fue aflojarla. Comparaba dos JSON como cadenas, que contesta «algo
+cambió»; ahora compara **los caminos que difieren** y el único admitido es
+`/nube/traido_en`. Quedó más estricta que antes: cualquier otro campo que
+dependa del espejo la pone roja con nombre y apellido.
+
+## Lo que se vio rojo, a propósito
+
+| Bug puesto de vuelta | Qué se cayó |
+|---|---|
+| El orden de `agentes()` invertido | «el que se movió recién va primero» — queda `coder-3` donde va `coder-8` |
+| La cuadrilla sin el sha | la pantalla se quedaría sin con qué ver que alguien se despertó |
+| Marcar «se despertó» por tiempo | la primera lectura y una relectura idéntica avisan las dos |
+| La pantalla se queda con el estado del servidor | los cuatro lados de los dos umbrales |
+| La frescura mirando `leido_en` | «sin la marca, la frescura dice no sé» |
+| `_traido_en()` sin ninguna marca que mirar | las dos del espejo descartable, y la de § 5b |
+
+Todos revertidos y confirmados con `diff -q`.
+
+## Lo que se miró con los ojos
+
+El arnés de la pantalla corre en un `vm` con un DOM de mentira, así que el
+demonio de verdad se miró en un navegador contra el servidor de verdad, a 375
+px: el pulso latiendo, el contador de frescura subiendo 7→15 s y volviendo a 2,
+`scrollWidth == clientWidth == 375` y **cero elementos pasando del ancho**. La
+tarjeta que se ve es `coder-3 · coder · Capataz · t10-mirar-la-nube · punto
+T10`, en rojo, «hace 10 h sin moverse».
+
+## El total
+
+**421 aserciones, 4 rojas** — y las cuatro son puntos ya anotados: T15 (tres, el
+arnés da por sentado que `erp360` es privado y los dos repositorios son
+públicos) y T16 (una, el arnés se pone rojo con su propio fixture falso).
+
+Antes de esta tanda eran 335 con las de la pantalla en cero, porque no había
+`node`. Con el binario oficial bajado a una carpeta temporal, la pantalla
+aportó 69. **Ese salto no es cobertura nueva de golpe**: 50 de esas aserciones
+ya existían y estaban salteándose en silencio, que es justo lo que T17 dice.

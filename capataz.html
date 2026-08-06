@@ -88,6 +88,46 @@ li:first-child { border-top: 0; }
 .viejo .meta { color: #f0b46a; }
 .nada { font-size: 12px; color: #6b7387; padding: 6px 0; }
 
+/* ---------------------------------------------------------------------------
+   La vista primaria: los agentes, no los proyectos.
+
+   Lo que se mira no es «cómo va el proyecto X» sino **quién está trabajando
+   ahora mismo**, y eso no se busca adentro de la tarjeta del proyecto que le
+   tocó. Los proyectos siguen abajo: sirven para otra pregunta.
+--------------------------------------------------------------------------- */
+.agente { background: #1b1e27; border: 1px solid #2a2f3d; border-left-width: 4px;
+          border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
+.a-trabajando { border-left-color: #2f9e6b; }
+.a-dudoso     { border-left-color: #b8862a; }
+.a-caido      { border-left-color: #b03434; }
+.a-sinrama    { border-left-color: #55607a; }
+.agente .quien { font-size: 16px; font-weight: 600; }
+.agente .donde { font-size: 12px; color: #8b93a7; margin-top: 2px; }
+
+/* El contador que avanza solo. `tabular-nums` para que no baile de ancho a
+   cada segundo, que es lo que hace que un número que corre se lea mal. */
+.reloj { font-variant-numeric: tabular-nums; }
+
+/* Un agente que se despertó: cambió el sha, no el reloj. Late unos segundos y
+   se apaga sola — un resaltado que queda para siempre deja de avisar. */
+.desperto { border-color: #2f9e6b; animation: latido 1.1s ease-out 4; }
+@keyframes latido { from { background: #14352a; } to { background: #1b1e27; } }
+.recien { color: #a6f0d2; font-size: 11px; margin-top: 3px; }
+
+/* El pulso del demonio. Si esto no late, la pantalla está congelada y hay que
+   verlo de un vistazo: una pantalla en vivo que se murió y sigue mostrando el
+   último dato es la misma mentira de la regla 3. */
+.pulso { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+         background: #2f9e6b; margin-right: 6px; vertical-align: middle;
+         transition: opacity .45s linear; }
+.pulso.apagado { opacity: .15; }
+.pulso.muerto  { background: #b03434; }
+
+/* Datos que ya no se están refrescando: el servidor no contesta. No se ocultan
+   —lo último que se supo sigue siendo lo último que se supo— pero no se pueden
+   mostrar como si fueran de ahora. */
+.sin-contacto .agente { opacity: .55; }
+
 details { margin-top: 6px; }
 summary { font-size: 11px; color: #8b93a7; cursor: pointer; }
 details p { font-size: 11px; color: #8b93a7; margin: 5px 0 0; }
@@ -98,6 +138,10 @@ details p { font-size: 11px; color: #8b93a7; margin: 5px 0 0; }
 <div class="hoja">
   <h1>capataz</h1>
   <div class="tenue" id="cabecera">leyendo…</div>
+  <h3><span class="pulso" id="pulso"></span>Agentes ahora</h3>
+  <div class="tenue" id="frescura">…</div>
+  <div id="agentes"></div>
+  <h3>Los proyectos</h3>
   <div id="cuerpo"></div>
   <div class="pie muy-tenue">
     Capataz sólo lee, y lee de GitHub. El SEGUIMIENTO de cada repositorio es la
@@ -361,23 +405,237 @@ function pintar(d) {
   document.getElementById("cuerpo").innerHTML = h;
 }
 
+/* ---------------------------------------------------------------------------
+   El demonio: tres relojes, y ninguno miente sobre lo que sabe el otro
+
+     1 s   los contadores avanzan y el estado se vuelve a decidir. No sale a
+           ningún lado: que el tiempo pasa se puede afirmar sin preguntar.
+     2 s   se le pide `/api/estado` a capataz.
+    15 s   capataz le pregunta a GitHub (`nube.REFRESCO`, y viaja en el JSON).
+
+   El tercero es el único que hace que un agente aparezca antes, y por eso la
+   frescura del dato se muestra siempre: un contador que corre cada segundo
+   sobre una lectura de hace un minuto es el tablero que miente en el caso que
+   importa.
+--------------------------------------------------------------------------- */
+var D = null;           /* el último estado que contestó el servidor */
+var T_RECIBIDO = 0;     /* cuándo llegó, por el reloj de ESTA máquina */
+var ULTIMO_OK = 0;
+var VISTOS = null;      /* sha por agente en la lectura anterior */
+var DESPIERTOS = {};    /* clave -> hasta cuándo mostrar que se despertó */
+var FIRMA = "";
+var LATE = false;
+var ESTATICA = false;
+var SIN_CONTACTO = 10;  /* segundos sin respuesta para dejar de creerle a la pantalla */
+
+var CLASE_AGENTE = {
+  "trabajando": "a-trabajando", "dudoso": "a-dudoso", "caído": "a-caido",
+  "sin rama": "a-sinrama", "no sé": "a-sinrama"
+};
+
+function claveAgente(a) { return a.proyecto + "·" + a.quien + "·" + a.que; }
+
+/* Hace cuánto, contado SIN restar dos relojes distintos. El servidor manda
+   `hace_seg` ya calculado con el suyo; acá se le suma lo que pasó desde que
+   llegó, medido con el local. Restar el reloj del teléfono contra el de la Mac
+   es cómo un contador arranca en «hace -3 min». */
+function haceVivo(seg) {
+  if (seg === null || seg === undefined) return null;
+  return seg + (Date.now() - T_RECIBIDO) / 1000;
+}
+
+/* El estado se vuelve a decidir en la pantalla a cada segundo, con los umbrales
+   que MANDA EL SERVIDOR. Copiarlos acá sería tener los mismos dos números en
+   dos lugares y ninguna regla sobre cuál gana: la regla 1 de este proyecto.
+   Sin umbrales en el JSON —una instantánea vieja— no se inventa ninguno: queda
+   lo que dijo el servidor. */
+function estadoVivo(seg, estadoServidor) {
+  if (estadoServidor === "sin rama" || seg === null) return estadoServidor;
+  if (!D || !D.umbrales) return estadoServidor;
+  if (seg < D.umbrales.fresco) return "trabajando";
+  if (seg < D.umbrales.tibio) return "dudoso";
+  return "caído";
+}
+
+function filaAgente(a) {
+  var seg = haceVivo(a.hace_seg);
+  var e = estadoVivo(seg, a.estado);
+  var k = claveAgente(a);
+  var desperto = DESPIERTOS[k] && DESPIERTOS[k] > Date.now();
+  return '<div class="agente ' + (CLASE_AGENTE[e] || "a-sinrama") +
+    (desperto ? " desperto" : "") + '" data-hace="' +
+    (a.hace_seg === null || a.hace_seg === undefined ? "" : a.hace_seg) +
+    '" data-estado="' + esc(a.estado) + '">' +
+    '<div class="quien">' + esc(a.quien) + '</div>' +
+    '<div class="donde">' + esc(a.rol || "sin rol") + ' · ' +
+    esc(a.proyecto) + ' · ' + esc(a.que) +
+    (a.punto ? ' · punto ' + esc(a.punto) : '') + '</div>' +
+    '<div class="chips"><span class="chip chip-estado ' +
+    (CLASE_RAMA[e] || "nose") + '">' + esc(e) + '</span>' +
+    '<span class="chip"><b class="reloj">' + esc(hace(seg)) + '</b>sin moverse</span>' +
+    '</div>' +
+    (desperto ? '<div class="recien">se despertó recién · ' + esc(a.sha) + '</div>' : '') +
+    '<div class="meta">' + esc(a.asunto) + '</div></div>';
+}
+
+function pintarAgentes() {
+  var cont = document.getElementById("agentes");
+  var ag = (D && D.agentes) || [];
+  if (!ag.length) {
+    cont.innerHTML = '<div class="nada">ninguna rama con trabajo sin integrar ' +
+      'y ningún punto en curso: nadie trabajando</div>';
+    return;
+  }
+  var h = "";
+  for (var i = 0; i < ag.length; i++) h += filaAgente(ag[i]);
+  cont.innerHTML = h;
+}
+
+/* Cada segundo: los contadores y el estado, sin tocar el resto del DOM. Volver
+   a dibujar todo cada segundo reiniciaría el latido del que se despertó, que es
+   justo lo que hay que poder ver. */
+function tickRelojes() {
+  var filas = document.querySelectorAll("#agentes .agente");
+  for (var i = 0; i < filas.length; i++) {
+    var f = filas[i];
+    var base = f.getAttribute("data-hace");
+    var seg = base === "" ? null : haceVivo(parseFloat(base));
+    var rel = f.querySelector(".reloj");
+    if (rel) rel.textContent = hace(seg);
+    var e = estadoVivo(seg, f.getAttribute("data-estado"));
+    var chip = f.querySelector(".chip-estado");
+    if (chip && chip.textContent !== e) {
+      chip.textContent = e;
+      chip.className = "chip chip-estado " + (CLASE_RAMA[e] || "nose");
+      f.className = "agente " + (CLASE_AGENTE[e] || "a-sinrama");
+    }
+  }
+}
+
+/* Hace cuánto se habló con GitHub, que no es hace cuánto repinta la pantalla ni
+   hace cuánto capataz miró su espejo. Es `traido_en` —la marca que deja el
+   `fetch`— y no `leido_en`: con esa otra la pantalla decía «GitHub leído hace
+   1 s» para siempre, porque el espejo se lee en cada pedido.
+
+   Se muestra el dato MÁS VIEJO de todos los proyectos: decir el más nuevo
+   taparía al repositorio que dejó de refrescarse. */
+function frescuraNube() {
+  if (!D || !D.proyectos) return null;
+  var peor = null;
+  for (var i = 0; i < D.proyectos.length; i++) {
+    var n = D.proyectos[i].nube || {};
+    if (n.sin_repo) continue;   /* no tiene de dónde traerse: no es un atraso */
+    if (!n.traido_en) return null;   /* uno sin marca y el conjunto es «no sé» */
+    var v = D.ahora - n.traido_en;
+    if (peor === null || v > peor) peor = v;
+  }
+  if (peor === null) return null;
+  /* Puede dar negativo por unos segundos y no es un error: la hora del pedido
+     se sella antes de salir a la red, y el `fetch` que tarda 1,2 s escribe su
+     marca después. «Hace -2 s» no significa nada para el que mira; es recién. */
+  return Math.max(0, peor) + (Date.now() - T_RECIBIDO) / 1000;
+}
+
+function pintarFrescura() {
+  var el = document.getElementById("frescura");
+  var pulso = document.getElementById("pulso");
+  var mudo = (Date.now() - ULTIMO_OK) / 1000;
+
+  if (ESTATICA) {
+    pulso.className = "pulso apagado";
+    el.textContent = "instantánea del " + (D ? D.cuando : "?") +
+      " · esto no se actualiza solo: no hay servidor a quien preguntarle";
+    return;
+  }
+  if (ULTIMO_OK && mudo > SIN_CONTACTO) {
+    /* Se dejó de saber. Lo último que se supo se sigue mostrando —es lo último
+       que se supo— pero apagado y con el motivo: una pantalla en vivo que se
+       murió y sigue pintando lo viejo como si fuera de ahora es la regla 3
+       rota en el único caso en que la pantalla importa. */
+    document.body.classList.add("sin-contacto");
+    pulso.className = "pulso muerto";
+    el.textContent = "sin contacto con capataz hace " + Math.round(mudo) +
+      " s · lo de abajo es de antes, no de ahora";
+    return;
+  }
+  document.body.classList.remove("sin-contacto");
+  LATE = !LATE;
+  pulso.className = "pulso" + (LATE ? "" : " apagado");
+  var f = frescuraNube();
+  el.textContent = "GitHub leído " + (f === null ? "hace cuánto: no sé" : hace(f)) +
+    " · se relee cada " + (D && D.refresco_nube ? D.refresco_nube : "?") +
+    " s · pantalla al segundo";
+}
+
+/* Se despertó = cambió el sha, no el reloj. Un agente nuevo también cuenta,
+   pero recién a partir de la SEGUNDA lectura: si no, la primera pintaría a
+   todos como recién despiertos y el aviso no querría decir nada. */
+function marcarDespiertos(ag) {
+  var ahora = {};
+  for (var i = 0; i < ag.length; i++) {
+    var k = claveAgente(ag[i]);
+    ahora[k] = ag[i].sha || "";
+    if (VISTOS && VISTOS[k] !== ahora[k]) DESPIERTOS[k] = Date.now() + 60000;
+  }
+  VISTOS = ahora;
+}
+
+function pintar(d) {
+  D = d;
+  T_RECIBIDO = Date.now();
+  document.getElementById("cabecera").textContent =
+    d.cuando + " · " + d.proyectos.length + " proyecto" +
+    (d.proyectos.length === 1 ? "" : "s") + " vigilado" +
+    (d.proyectos.length === 1 ? "" : "s") + " en GitHub";
+
+  marcarDespiertos(d.agentes || []);
+  /* Sólo se vuelve a dibujar si algo cambió de verdad. Repintar cada dos
+     segundos lo mismo apaga el latido del que se despertó y hace parpadear una
+     pantalla que se mira fija. */
+  var firma = JSON.stringify(d.agentes) + "|" + JSON.stringify(DESPIERTOS);
+  if (firma !== FIRMA) { FIRMA = firma; pintarAgentes(); }
+
+  var h = "";
+  if (d.sin_proyectos) {
+    h = '<div class="tarjeta"><h2>Ningún proyecto vigilado</h2>' +
+        '<div class="tenue">Agregá uno en <code>proyectos.json</code>: el ' +
+        '<code>owner/repo</code> de GitHub y el nombre de su archivo de ' +
+        'seguimiento, porque no todos se llaman igual.</div></div>';
+  }
+  for (var i = 0; i < d.proyectos.length; i++) h += tarjeta(d.proyectos[i]);
+  document.getElementById("cuerpo").innerHTML = h;
+}
+
 function traer() {
   fetch("/api/estado", { cache: "no-store" })
     .then(function (r) { return r.json(); })
-    .then(pintar)
+    .then(function (d) { ULTIMO_OK = Date.now(); pintar(d); })
     .catch(function (e) {
+      /* No se toca lo que ya está dibujado: de eso se encarga `pintarFrescura`,
+         que es quien sabe hace cuánto que no se sabe nada. */
       document.getElementById("cabecera").textContent =
         "no llego al servidor: " + e;
     });
 }
 
+function tick() {
+  tickRelojes();
+  pintarFrescura();
+}
+
 if (window.CAPATAZ_DATOS) {
   /* Instantánea estática: los datos vienen incrustados y no hay a quién
-     preguntarle. Es lo que se abre con `file://` para mirar el ancho angosto. */
+     preguntarle. Es lo que se abre con `file://` para mirar el ancho angosto.
+     Los contadores igual avanzan —el tiempo pasa— pero la pantalla dice que es
+     una foto, porque nadie la está refrescando. */
+  ESTATICA = true;
   pintar(window.CAPATAZ_DATOS);
+  setInterval(tick, 1000);
+  tick();
 } else {
   traer();
-  setInterval(traer, 15000);
+  setInterval(traer, 2000);
+  setInterval(tick, 1000);
 }
 </script>
 </body>

@@ -61,22 +61,41 @@ const datos = JSON.parse(execFileSync(
 ));
 
 // --- el DOM más chico que hace falta ---------------------------------------
+function nodo() {
+  return {
+    textContent: "", innerHTML: "", className: "",
+    classList: { add() {}, remove() {} },
+    querySelector: () => null, querySelectorAll: () => []
+  };
+}
+
 function armarPantalla() {
   const nodos = {
-    cabecera: { textContent: "", innerHTML: "" },
-    cuerpo: { textContent: "", innerHTML: "" }
+    cabecera: nodo(), cuerpo: nodo(),
+    // Los tres de la vista primaria. Sin ellos `pintarAgentes()` escribiría
+    // sobre `undefined` y este arnés se caería antes de afirmar nada.
+    agentes: nodo(), frescura: nodo(), pulso: nodo()
   };
+  const relojes = [];
   const contexto = {
     window: {},
-    document: { getElementById: (id) => nodos[id] },
+    document: {
+      getElementById: (id) => nodos[id],
+      querySelectorAll: () => [],
+      body: nodo()
+    },
     console: console,
     // Si el script intentara pedir datos por la red, esto lo delata: acá los
     // datos vienen incrustados y `traer()` no se tiene que llamar nunca.
     fetch: () => { throw new Error("la pantalla estática no debe hacer fetch"); },
-    setInterval: () => { throw new Error("la pantalla estática no debe pollear"); }
+    // **Un `setInterval` local ya no es un pecado, y un `fetch` sí.** La
+    // pantalla estática late para que los contadores sigan siendo ciertos
+    // mientras alguien la mira —el tiempo pasa igual—, pero no tiene a quién
+    // preguntarle. Lo que se afirma abajo es que late y que NO pollea.
+    setInterval: (fn, ms) => { relojes.push(ms); return relojes.length; }
   };
   contexto.window.CAPATAZ_DATOS = null;
-  return { nodos, contexto };
+  return { nodos, contexto, relojes };
 }
 
 const HTML = fs.readFileSync(path.join(RAIZ, "capataz.html"), "utf-8");
@@ -87,10 +106,12 @@ const CODIGO = guiones.join("\n").replace(/<\/?script>/g, "");
 af("y el guión no está vacío", CODIGO.length > 2000, String(CODIGO.length));
 
 function pintarCon(d) {
-  const { nodos, contexto } = armarPantalla();
+  const { nodos, contexto, relojes } = armarPantalla();
   contexto.window.CAPATAZ_DATOS = d;
   vm.createContext(contexto);
   vm.runInContext(CODIGO, contexto, { filename: "capataz.html" });
+  nodos.relojes = relojes;
+  nodos.contexto = contexto;
   return nodos;
 }
 
@@ -372,6 +393,100 @@ af("sin nadie trabajando se dice, y se dice sobre qué se miró",
    htmlVacio.indexOf("nadie trabajando") >= 0 &&
    htmlVacio.indexOf("sin integrar") >= 0, htmlVacio.slice(0, 200));
 af("y eso NO es «no sé»", htmlVacio.indexOf("quién trabaja · no sé") < 0);
+
+console.log("§ 7 · El visor por agente, y el demonio de un segundo");
+/* La vista primaria: quién trabaja ahora, de todos los proyectos juntos. Y el
+ * demonio que la mantiene viva sin mentir sobre la frescura de lo que muestra. */
+const conAg = copia(datos);
+conAg.agentes = [
+  { quien: "coder-1", rol: "coder", proyecto: "Uno", que: "t1-una",
+    punto: "T1", asunto: "empujó algo", estado: "trabajando", desde: 1,
+    hace_seg: 60, sha: "aaa1111" },
+  { quien: "coder-2", rol: "coder", proyecto: "Dos", que: "t2-otra",
+    punto: "T2", asunto: "hace rato", estado: "caído", desde: 1,
+    hace_seg: 90000, sha: "bbb2222" }
+];
+const p7 = pintarCon(conAg);
+const hAg = p7.agentes.innerHTML;
+af("la vista primaria dibuja a cada agente con su nombre",
+   hAg.indexOf("coder-1") >= 0 && hAg.indexOf("coder-2") >= 0, hAg.slice(0, 200));
+af("y de qué proyecto es cada uno: sin eso no se sabe a quién ir a buscar",
+   hAg.indexOf("Uno") >= 0 && hAg.indexOf("Dos") >= 0);
+af("junta agentes de proyectos distintos, que es lo que la hace primaria",
+   hAg.indexOf("t1-una") >= 0 && hAg.indexOf("t2-otra") >= 0);
+af("el que se cayó se pinta con su color y NO de verde",
+   /a-caido/.test(hAg) && !/chip-estado verde/.test(hAg), hAg.slice(0, 300));
+af("y el que trabaja, con el suyo", /a-trabajando/.test(hAg));
+
+/* El demonio. Lo que se afirma no es que exista un `setInterval` —eso es una
+ * cadena— sino con qué ritmos quedó armado y que la instantánea no pollee. */
+af("la pantalla late una vez por segundo: los contadores siguen siendo ciertos " +
+   "mientras alguien la mira", p7.relojes.indexOf(1000) >= 0,
+   JSON.stringify(p7.relojes));
+af("y la instantánea NO pollea: no hay a quién preguntarle",
+   p7.relojes.filter(function (m) { return m !== 1000; }).length === 0,
+   JSON.stringify(p7.relojes));
+
+/* Los umbrales los manda el servidor y la pantalla los vuelve a aplicar a cada
+ * segundo. Los dos lados de cada uno, que es donde se esconde un `<` de más. */
+const ctx = p7.contexto;
+af("un segundo antes de FRESCO la pantalla dice «trabajando»",
+   ctx.estadoVivo(conAg.umbrales.fresco - 1, "caído") === "trabajando");
+af("un segundo después, «dudoso» — sin esperar ninguna lectura nueva",
+   ctx.estadoVivo(conAg.umbrales.fresco + 1, "trabajando") === "dudoso");
+af("un segundo antes de TIBIO todavía es «dudoso»",
+   ctx.estadoVivo(conAg.umbrales.tibio - 1, "trabajando") === "dudoso");
+af("un segundo después ya es «caído»",
+   ctx.estadoVivo(conAg.umbrales.tibio + 1, "trabajando") === "caído");
+af("y el que no tiene rama sigue sin tenerla: el reloj no lo convierte en nada",
+   ctx.estadoVivo(null, "sin rama") === "sin rama");
+/* Una instantánea vieja no trae umbrales. No se inventan: queda lo que dijo el
+ * servidor, que es la regla 3 aplicada a la pantalla misma. */
+const sinUmbrales = copia(conAg);
+delete sinUmbrales.umbrales;
+af("sin umbrales en el JSON no se inventa ninguno",
+   pintarCon(sinUmbrales).contexto.estadoVivo(10, "dudoso") === "dudoso");
+
+/* «Se despertó» tiene que ser un empujón y no un reloj: si se marcara por
+ * tiempo, avisaría solo y el aviso dejaría de querer decir nada. */
+function relectura(ctxt, agentes) {
+  const d = copia(conAg);
+  d.agentes = agentes;
+  ctxt.FIRMA = "";
+  ctxt.pintar(d);
+  return ctxt.document.getElementById("agentes").innerHTML;
+}
+ctx.VISTOS = null;
+ctx.DESPIERTOS = {};
+af("la primera lectura no marca a nadie como recién despierto: si no, cada vez " +
+   "que se abre la pantalla parecería que empujaron todos",
+   !/desperto/.test(relectura(ctx, conAg.agentes)));
+af("dos lecturas con el mismo sha tampoco: no pasó nada",
+   !/desperto/.test(relectura(ctx, conAg.agentes)));
+const movido = copia(conAg.agentes);
+movido[0].sha = "ccc3333";
+movido[0].hace_seg = 2;
+af("y un sha nuevo sí: eso es un empujón",
+   /desperto/.test(relectura(ctx, movido)));
+
+/* La frescura. Es el dato que dice si creerle al resto de la pantalla. */
+ctx.ESTATICA = false;
+ctx.ULTIMO_OK = Date.now();
+const sinMarca = copia(conAg);
+sinMarca.proyectos.forEach(function (p) {
+  if (p.nube) { p.nube.traido_en = null; p.nube.sin_repo = false; }
+});
+ctx.pintar(sinMarca);
+ctx.pintarFrescura();
+af("sin la marca de cuándo se trajo, la frescura dice «no sé» y no «hace 0 s»",
+   p7.frescura.textContent.indexOf("no sé") >= 0, p7.frescura.textContent);
+ctx.ULTIMO_OK = Date.now() - 30000;
+ctx.pintarFrescura();
+af("y si el servidor deja de contestar, la pantalla lo dice en vez de seguir " +
+   "mostrando lo viejo como si fuera de ahora",
+   p7.frescura.textContent.indexOf("sin contacto") >= 0, p7.frescura.textContent);
+af("con hace cuánto que no sabe nada, que es lo accionable",
+   /\d+ s/.test(p7.frescura.textContent), p7.frescura.textContent);
 
 console.log("\nASERCIONES: " + ASER + "\nROJAS: " + ROJAS);
 process.exit(ROJAS ? 1 : 0);

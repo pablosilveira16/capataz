@@ -71,10 +71,16 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 ESPEJOS = (os.environ.get("CAPATAZ_ESPEJOS")
            or os.path.join(tempfile.gettempdir(), "capataz-espejos"))
 
-# Cada cuánto se vuelve a preguntarle a GitHub. La pantalla se refresca cada
-# 15 s; sin esto serían cuatro `fetch` por minuto por proyecto para ver lo
-# mismo. Con 60 s, «hace diez minutos» sigue siendo «hace diez minutos».
-REFRESCO = int(os.environ.get("CAPATAZ_REFRESCO", 60))
+# Cada cuánto se vuelve a preguntarle a GitHub, y **es el único reloj que hace
+# que un agente se vea antes**: la pantalla puede repintar cada un segundo, pero
+# lo que no se fue a buscar no está. Con 60 s un agente que empuja tardaba hasta
+# un minuto en aparecer prendido, que es justo el momento que se quiere mirar.
+#
+# 15 s sale medido: un `git fetch` contra el espejo tarda 1,2 s por repositorio
+# (2026-08-06, dos repositorios), así que son ~2,4 s de git cada 15 — el resto
+# del tiempo el servidor no toca la red. Bajarlo más no es gratis y lo que se
+# gana es medio segundo de aviso.
+REFRESCO = int(os.environ.get("CAPATAZ_REFRESCO", 15))
 
 # Cuántos commits de historia se bajan. Alcanza para «los commits recientes» y
 # para que `rev-list --count` diga la verdad en ramas que se abrieron hace poco,
@@ -284,6 +290,26 @@ def refrescar(repo, base=None, token=None, refresco=None, ahora=None):
     return destino, error
 
 
+def _traido_en(destino):
+    """Cuándo se habló con GitHub por última vez. **No es lo mismo que leer.**
+
+    `leido_en` dice cuándo capataz miró el espejo, y eso pasa en cada pedido de
+    la pantalla: mostrarlo como frescura del dato daba «GitHub leído hace 1 s»
+    para siempre, aunque el último `fetch` fuera de hace quince segundos. La
+    marca de verdad la deja git: `FETCH_HEAD` la escribe cada `fetch`, y en un
+    espejo recién clonado —donde todavía no hubo ninguno— vale la carpeta.
+
+    Sin ninguna de las dos no se inventa una fecha: `None`, y la pantalla dice
+    «no sé».
+    """
+    for marca in (os.path.join(destino, "FETCH_HEAD"), destino):
+        try:
+            return os.path.getmtime(marca)
+        except OSError:
+            pass
+    return None
+
+
 def _texto(destino, ref, archivo, base=None):
     if not archivo:
         return None
@@ -441,6 +467,7 @@ def leer(proy, base=None, token_base=None, ahora=None, refresco=None):
         "error": _explicar(error, repo, archivo_token) if error else "",
         "rancio": bool(error),
         "leido_en": ahora,
+        "traido_en": _traido_en(destino),
         "espejo": destino,
         "principal": principal,
         "archivos": archivos,
