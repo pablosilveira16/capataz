@@ -1,25 +1,26 @@
 #!/usr/bin/env python3
-"""Lo que capataz sabe de un proyecto, leyendo y nada más.
+"""Lo que capataz entiende de un proyecto. Funciones puras y nada más.
 
-Todo lo que hay acá adentro es de **sólo lectura**, y no por prolijidad: es la
-regla 1 de `CLAUDE.md`. El `SEGUIMIENTO.md` de cada proyecto es la verdad y git
-es el árbitro; si capataz escribiera un estado propio habría dos lugares con el
-mismo dato y ninguna regla sobre cuál gana. Concretamente, en este archivo:
+Este archivo **no toca la red, no corre git y no escribe nada**: recibe el
+texto que `nube.py` trajo de GitHub y lo convierte en lo que la pantalla
+dibuja. La separación no es prolijidad, es lo que hace que las dos mitades se
+puedan verificar:
 
-  · ningún `open(..., "w")`, ningún `os.remove`, ningún `mkdir`;
-  · los comandos de git pasan por `_git()`, que **rechaza** cualquier
-    subcomando que no esté en `GIT_LECTURA` — un `fetch` o un `checkout` desde
-    acá ya es capataz teniendo opinión sobre el repo de otro.
+  · `lector.py` se ejercita con textos escritos en el arnés, sin red, y las
+    cuentas se comparan contra números contados a mano
+    → `pruebas/verificar-lector.py`;
+  · `nube.py` se ejercita contra **los repositorios de verdad**, que es lo
+    único que prueba que un lector de red lee → `pruebas/verificar-nube.py`.
 
-Lo verifica `pruebas/verificar-lector.py` § 1, y no leyendo este comentario:
-saca una foto de un proyecto de prueba, corre `mirar()` entero y compara.
+Un lector de red probado sólo contra respuestas grabadas pasa entero con la red
+rota. Ése es el arnés vacuo de la regla 2 de `CLAUDE.md`, y ésta es la forma de
+no tenerlo.
 
-Sin dependencias: sólo biblioteca estándar. Es la misma línea que `panel.py` de
-ERP 360, y el motivo está escrito en el andamio — un proyecto que necesita
-instalar algo para verificarse es un proyecto donde el agente depende de que vos
-estés. Acá se suma otro: capataz mira proyectos ajenos y no debe imponerles nada.
+Verificado, y no leyendo este comentario: `pruebas/verificar-lector.py` § 1
+recorre el árbol sintáctico de este archivo y se pone rojo si aparece un
+`open(..., "w")`, un `os.remove` o **un solo `subprocess`**.
 
-## Los dos formatos, que es la mitad del problema
+## Los dos formatos de seguimiento, que es la mitad del problema
 
 ERP 360 y Finca 360 no escriben igual el seguimiento:
 
@@ -30,16 +31,24 @@ ERP 360 y Finca 360 no escriben igual el seguimiento:
     el estado lo dice el título de la sección («Depende de Pablo»).
 
 Por eso el estado se saca del **encabezado de la tabla** y no de «la última
-celda»: si hay una columna `Estado`, se lee de ahí. Si no la hay, se cae al
-título de la sección, y sólo con el mapa que el propio `proyectos.json` declara
-para ese proyecto. Si tampoco alcanza, el punto queda en `sin estado` y se
-muestra como tal — no se adivina.
+celda». Si no hay columna `Estado`, se cae al título de la sección, y sólo con
+el mapa que el propio `proyectos.json` declara. Si tampoco alcanza, el punto
+queda en `sin estado` y se muestra como tal — no se adivina.
+
+## De dónde sale la cuadrilla, desde el 2026-08-06
+
+De **git**, y no de `panel/agentes.jsonl`. Ese archivo no se versiona a
+propósito —tres agentes en tres copias producen tres archivos que no se
+fusionan—, así que **nunca llega a la nube**: leerlo de la carpeta local sería
+mostrar los agentes que corrieron en esta máquina como si fueran la cuadrilla
+entera, que es la mentira exacta que la regla 3 prohíbe. Lo que sí llega a la
+nube es la rama que un agente empujó y el autor de sus commits.
+El capítulo está en `BITACORA.md`, Tanda 2.
 """
 import io
 import json
 import os
 import re
-import subprocess
 import time
 
 # Los cinco, y no hay otros. El mismo vocabulario cerrado del contrato de
@@ -51,34 +60,20 @@ SIN_ESTADO = "sin estado"
 # dos palabras y porque es el que más urge ver.
 _ORDEN_MATCHEO = ("en curso", "pendiente", "hecho", "diferido", "descartado")
 
-# Después de esto, una marca de «empecé» deja de contar como trabajo en curso.
-# Un agente que se cae no puede dejar el tablero diciendo que trabaja para
-# siempre: eso sería peor que no tener tablero. Es el mismo valor que usa
-# `panel/panel.py` de ERP 360, del que sale el formato de las marcas.
-VENCE_EN = 30 * 60
+# ---------------------------------------------------------------------------
+# Prendido o caído: los dos umbrales, y por qué son dos y no uno
+# ---------------------------------------------------------------------------
+#
+# «Una rama que apareció hace diez minutos es un agente trabajando; una que no
+# se mueve hace horas es un agente que se cayó.» Entre las dos hay un rato en
+# que no se sabe, y **ese rato tiene que verse como lo que es**: un agente
+# pensando y uno caído se parecen mucho a los veinte minutos y nada a las seis
+# horas. Un umbral solo obliga a llamar «caído» a algo que capataz no sabe.
+FRESCO = 45 * 60          # menos que esto: trabajando
+TIBIO = 4 * 3600          # entre los dos: dudoso. Más: caído
 
-# Cuántas marcas viajan a la pantalla. Con más, el tablero se vuelve un log.
-ULTIMAS_MARCAS = 40
-
-# Sólo lectura, y verificado: `_git()` revienta con cualquier otro subcomando.
-GIT_LECTURA = frozenset((
-    "rev-parse", "for-each-ref", "rev-list", "show", "log", "cat-file",
-))
-
-MOTIVO_CI = (
-    "api.github.com está fuera de la lista blanca del contenedor de un agente "
-    "(medido en ERP 360, ops/70-credenciales.md), y gh no está instalado. "
-    "Desde acá no se puede leer el CI: hay que abrirlo en la web."
-)
-
-MOTIVO_TOTAL = (
-    "el proyecto no dejó el total medido en pruebas/total-aserciones.txt. "
-    "Un total declarado en prosa no es un total medido."
-)
-
-
-class SoloLectura(RuntimeError):
-    """Se intentó correr algo que escribe. Capataz sólo lee (CLAUDE.md § 1)."""
+# Cuántos commits recientes viajan a la pantalla. Con más, el tablero es un log.
+ULTIMOS_COMMITS = 12
 
 
 # ----------------------------------------------------------------------------
@@ -202,21 +197,16 @@ def _estado_de_seccion(seccion, mapa):
     return None
 
 
-def leer_seguimiento(ruta, secciones=None):
+def analizar_seguimiento(texto, secciones=None, hoy=None):
     """Los puntos de un `SEGUIMIENTO.md`, con su estado y de dónde salió.
 
-    Nunca revienta: si el archivo no está, devuelve el error adentro. Un
-    tablero que se cae porque un proyecto se movió de carpeta no sirve de nada.
+    Recibe el **texto**, no una ruta: el archivo lo trae `nube.py` de la rama
+    principal del repositorio en GitHub. `texto is None` quiere decir «no se
+    pudo leer», que es distinto de un archivo vacío y se devuelve distinto.
     """
-    if not os.path.isfile(ruta):
-        return {"ruta": ruta, "existe": False,
-                "error": "no encuentro %s" % ruta, "puntos": []}
-    try:
-        with io.open(ruta, encoding="utf-8") as f:
-            texto = f.read()
-    except OSError as e:
-        return {"ruta": ruta, "existe": True, "error": str(e), "puntos": []}
-
+    if texto is None:
+        return {"existe": False, "puntos": [], "repetidos": [],
+                "tablas_ignoradas": 0}
     puntos = []
     ignoradas = 0
     for seccion, historia, enc, filas in _tablas(texto):
@@ -280,12 +270,12 @@ def leer_seguimiento(ruta, secciones=None):
                 "origen_estado": origen,
                 "quien": m.group(1) if m else "",
                 "desde": desde,
-                "dias": _dias_desde(desde),
+                "dias": _dias_desde(desde, hoy),
                 "bloquea_a_pablo": bool(_PABLO.search(crudo)),
             })
     unicos, repetidos = separar_repetidos(puntos)
-    return {"ruta": ruta, "existe": True, "error": "", "puntos": unicos,
-            "repetidos": repetidos, "tablas_ignoradas": ignoradas}
+    return {"existe": True, "puntos": unicos, "repetidos": repetidos,
+            "tablas_ignoradas": ignoradas}
 
 
 def separar_repetidos(puntos):
@@ -359,20 +349,15 @@ def pendientes_de_pablo(puntos):
 _ROL = re.compile(r"^##\s+([A-Za-zÁÉÍÓÚÑáéíóúñ]+)\s*$")
 
 
-def leer_roles(ruta):
+def analizar_roles(texto):
     """Los tipos de agente del proyecto, leídos de su `ops/60-roles.md`.
 
-    **Devuelve `None` si el archivo no está**, y eso es distinto de una lista
-    vacía: quiere decir «no sé qué roles tiene este proyecto». Finca 360 no
-    tiene ese archivo. Escribir acá la lista de seis de ERP 360 sería la segunda
-    fuente que la regla 1 prohíbe, y además sería mentira.
+    **Devuelve `None` si el texto no está**, y eso es distinto de una lista
+    vacía: quiere decir «no sé qué roles tiene este proyecto». Escribir acá la
+    lista de seis de ERP 360 sería la segunda fuente que la regla 1 prohíbe, y
+    además sería mentira.
     """
-    if not ruta or not os.path.isfile(ruta):
-        return None
-    try:
-        with io.open(ruta, encoding="utf-8") as f:
-            texto = f.read()
-    except OSError:
+    if texto is None:
         return None
     roles = []
     for linea in texto.splitlines():
@@ -384,73 +369,35 @@ def leer_roles(ruta):
     return roles
 
 
-# ----------------------------------------------------------------------------
-# 3 · La cuadrilla: quién trabaja ahora
-# ----------------------------------------------------------------------------
+_NOMBRE_ROL = re.compile(r"^([a-záéíóúñ]+)[-_ ]?\d*$")
 
-def leer_marcas(ruta):
-    """Las marcas de `panel/agentes.jsonl`, de la más vieja a la más nueva.
 
-    Las **escribe** el `panel/agente.py` de cada proyecto; capataz sólo las lee.
-    Una línea rota no puede tirar el tablero: se saltea y se sigue.
+def rol_de(quien):
+    """El rol que se deduce de un nombre de agente: `coder-3` → `coder`.
+
+    Es una **deducción sobre el nombre con que alguien commiteó**, no un dato:
+    si el autor es `Pablo Silveira`, acá sale `""` y la pantalla dice «sin rol».
+    Eso es correcto y además es información: quiere decir que en ese proyecto
+    los agentes no firman con su rol, y entonces la cuadrilla por rol no se
+    puede saber desde git.
     """
-    if not ruta or not os.path.isfile(ruta):
-        return []
-    out = []
-    try:
-        with io.open(ruta, encoding="utf-8") as f:
-            for linea in f:
-                linea = linea.strip()
-                if not linea:
-                    continue
-                try:
-                    d = json.loads(linea)
-                except ValueError:
-                    continue
-                if isinstance(d, dict):
-                    out.append(d)
-    except OSError:
-        return []
-    return out
+    m = _NOMBRE_ROL.match((quien or "").strip().lower())
+    return m.group(1) if m else ""
 
 
-def activos(marcas, ahora=None, vence_en=VENCE_EN):
-    """Quién está trabajando ahora, en qué, con qué rol y hace cuánto."""
-    ahora = time.time() if ahora is None else ahora
-    abierto = {}
-    for m in marcas:
-        quien = m.get("quien") or "agente"
-        if m.get("accion") == "empieza":
-            abierto[quien] = m
-        elif m.get("accion") == "termina":
-            abierto.pop(quien, None)
-    vivos = []
-    for quien, m in abierto.items():
-        desde = m.get("ts") or 0
-        if ahora - desde > vence_en:
-            continue
-        vivos.append({"quien": quien,
-                      "rol": (m.get("rol") or "").lower(),
-                      "que": m.get("que") or "",
-                      "desde": desde,
-                      "hace_min": int((ahora - desde) // 60)})
-    return sorted(vivos, key=lambda v: v["desde"])
-
-
-def por_rol(vivos, roles):
+def por_rol(cuadrilla, roles):
     """El reparto por rol, **con los ceros**.
 
     «coder 3» no dice nada; «coder 3 · reviewer 0» es la frase que hace que
     alguien haga algo. Si el proyecto no declara sus roles (`roles is None`) no
-    se inventan: se devuelven sólo los que aparecen en las marcas y el campo
-    `conocidos` queda en falso, para que la pantalla lo diga.
+    se inventan: se devuelven sólo los que aparecen y `conocidos` queda en
+    falso, para que la pantalla lo diga.
     """
     cuenta = {}
     for r in (roles or ()):
         cuenta[r] = 0
-    for v in vivos:
-        r = v.get("rol") or ""
-        clave = r or "sin rol"
+    for v in cuadrilla:
+        clave = v.get("rol") or "sin rol"
         cuenta[clave] = cuenta.get(clave, 0) + 1
     orden = list(roles or ())
     for k in sorted(cuenta):
@@ -461,111 +408,122 @@ def por_rol(vivos, roles):
 
 
 # ----------------------------------------------------------------------------
-# 4 · Las ramas, y el total de aserciones de cada una
+# 3 · Prendido o caído — lo que Pablo quiere ver
 # ----------------------------------------------------------------------------
 
-def _git(ruta, *args):
-    """git, **sólo de lectura**. Cualquier otro subcomando revienta.
+def estado_rama(rama, ahora=None):
+    """Qué dice de un agente el último commit de su rama.
 
-    No es una precaución teórica: `fetch`, `checkout` y `worktree` son las tres
-    cosas que uno agrega sin pensar el día que quiere «un dato más», y las tres
-    escriben en el repo de otro proyecto. La regla 1 de `CLAUDE.md` es que
-    capataz no toca nada, y acá es donde se hace cumplir.
+    Cinco desenlaces, y los cinco significan algo distinto:
+
+      `principal`   es `main`. No es la rama de nadie.
+      `integrada`   no tiene ni un commit por delante de `main`: lo que traía
+                    ya entró. Una rama así **no es un agente caído**, es una
+                    rama terminada, y llamarla caída sería inventar un
+                    incendio. Es el desenlace más común y el que un umbral
+                    solo se equivoca — de las cinco ramas que había el
+                    2026-08-06 en los dos repositorios vigilados, tres.
+      `trabajando`  se movió hace menos de 45 minutos.
+      `dudoso`      hace más de eso y menos de 4 horas. **No se afirma nada**:
+                    es el rato en que un agente pensando y uno caído se
+                    parecen.
+      `caído`       no se mueve hace más de 4 horas y tiene trabajo sin
+                    integrar. Eso es lo que hay que mirar.
+
+    Sin fecha del último commit —no debería pasar— el desenlace es `no sé`,
+    nunca `trabajando`. Los dos umbrales son `FRESCO` y `TIBIO`.
     """
-    if not args or args[0] not in GIT_LECTURA:
-        raise SoloLectura(
-            "«git %s» no es de lectura. Capataz sólo lee (CLAUDE.md § 1). "
-            "Los permitidos: %s" % (args[0] if args else "", ", ".join(sorted(GIT_LECTURA))))
-    try:
-        p = subprocess.run(["git", "-C", ruta] + list(args),
-                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                           timeout=15)
-    except (OSError, subprocess.SubprocessError):
+    ahora = time.time() if ahora is None else ahora
+    if rama.get("es_principal"):
+        return "principal"
+    if rama.get("ts") is None:
+        return "no sé"
+    if rama.get("commits_adelante") == 0:
+        return "integrada"
+    edad = ahora - rama["ts"]
+    if edad < FRESCO:
+        return "trabajando"
+    if edad < TIBIO:
+        return "dudoso"
+    return "caído"
+
+
+def _hace(ts, ahora):
+    if ts is None:
         return None
-    if p.returncode != 0:
-        return None
-    return p.stdout.decode("utf-8", "replace").strip()
+    return max(0, int(ahora - ts))
 
 
-def _total_en(ruta, ref, archivo):
-    """El total de aserciones que el proyecto dejó **medido** en esa ref.
+def cuadrilla(ramas, puntos, ahora=None):
+    """Quién está prendido, quién se cayó y quién tomó un punto sin empujar.
 
-    Si no está el archivo, `None` — y la pantalla dice «no sé». Nunca se
-    inventa un número ni se lo saca de la prosa del seguimiento: un total
-    declarado a mano en una celda es lo que alguien recordó escribir, no lo que
-    la suite midió.
+    Sale entera de git, que es lo único que llega a la nube:
+
+      · **una rama viva es un agente.** El autor de su último commit es quien
+        trabaja, y `desde` es cuándo se movió por última vez;
+      · **un `en curso (fulano)` sin ninguna rama de fulano** es un punto
+        tomado del que no llegó nada. Puede ser un agente que trabaja sin
+        empujar todavía o uno que se cayó antes del primer commit; capataz no
+        puede distinguirlos y por eso dice `sin rama` y no elige.
     """
-    if not archivo:
-        return None
-    salida = _git(ruta, "show", "%s:%s" % (ref, archivo))
-    if salida is None:
-        return None
-    m = re.search(r"\d+", salida)
-    return int(m.group(0)) if m else None
-
-
-def leer_ramas(ruta, total_archivo="pruebas/total-aserciones.txt", principal="main"):
-    """Las ramas del repo, de qué punto son y su total contra el de `main`.
-
-    Devuelve `None` si el proyecto **no es un repo git** —Finca 360 no lo es— y
-    eso también es un «no sé» y no un cero.
-    """
-    if _git(ruta, "rev-parse", "--is-inside-work-tree") != "true":
-        return None
-    fmt = "%(refname:short)\t%(committerdate:short)\t%(authorname)\t%(subject)"
-    salida = _git(ruta, "for-each-ref", "--format=" + fmt, "refs/heads")
-    if salida is None:
-        return None
-    total_main = _total_en(ruta, principal, total_archivo)
-    ramas = []
-    for linea in salida.splitlines():
-        partes = linea.split("\t")
-        if len(partes) < 4:
+    ahora = time.time() if ahora is None else ahora
+    vivos = []
+    con_rama = set()
+    for r in ramas or ():
+        e = estado_rama(r, ahora)
+        if e in ("principal", "integrada"):
             continue
-        nombre, fecha, autor, asunto = partes[0], partes[1], partes[2], partes[3]
-        cuenta = _git(ruta, "rev-list", "--left-right", "--count",
-                      "%s...%s" % (principal, nombre))
-        atras = adelante = None
-        if cuenta:
-            nums = cuenta.split()
-            if len(nums) == 2:
-                atras, adelante = int(nums[0]), int(nums[1])
-        total = _total_en(ruta, nombre, total_archivo)
-        m = re.match(r"^([A-Za-z]{1,4})[-_]?(\d+)", nombre)
-        ramas.append({
-            "nombre": nombre,
-            "es_principal": nombre == principal,
-            "punto": (m.group(1) + m.group(2)).upper() if m else "",
-            "fecha": fecha,
-            "autor": autor,
-            "asunto": asunto[:160],
-            "commits_adelante": adelante,
-            "commits_atras": atras,
-            "total": total,
-            "total_main": total_main,
-            "delta": (None if total is None or total_main is None
-                      else total - total_main),
-            "motivo_sin_total": "" if total is not None else MOTIVO_TOTAL,
+        quien = r.get("autor") or "alguien"
+        con_rama.add(quien.lower())
+        vivos.append({
+            "quien": quien,
+            "rol": rol_de(quien),
+            "que": r.get("nombre") or "",
+            "punto": r.get("punto") or "",
+            "asunto": r.get("asunto") or "",
+            "estado": e,
+            "desde": r.get("ts"),
+            "hace_seg": _hace(r.get("ts"), ahora),
         })
-    ramas.sort(key=lambda r: (not r["es_principal"], r["nombre"]))
-    return ramas
+    for p in (puntos or ()):
+        if p.get("estado") != "en curso":
+            continue
+        quien = (p.get("quien") or "").strip()
+        if not quien or quien.lower() in con_rama:
+            continue
+        con_rama.add(quien.lower())
+        vivos.append({
+            "quien": quien,
+            "rol": rol_de(quien),
+            "que": p.get("id") or "",
+            "punto": p.get("id") or "",
+            "asunto": p.get("titulo") or "",
+            "estado": "sin rama",
+            "desde": None,
+            "hace_seg": None,
+        })
+    # El que hace más que no se mueve, primero: es el que hay que mirar.
+    return sorted(vivos, key=lambda v: (v["hace_seg"] is None,
+                                        -(v["hace_seg"] or 0)))
 
 
 # ----------------------------------------------------------------------------
-# 5 · El CI, que desde acá no se puede leer
+# 4 · El CI
 # ----------------------------------------------------------------------------
 
-def interpretar_ci(respuesta):
+def interpretar_ci(respuesta, motivo=""):
     """Traducir una respuesta de la API de GitHub a un estado de pantalla.
 
-    Está separada de `estado_ci` a propósito: el día que capataz corra en la
-    Mac —donde `api.github.com` sí se alcanza— lo único que cambia es quién le
-    pasa la respuesta. **Sin respuesta, `no sé`. Nunca `verde`.**
+    Está separada de quien va a buscarla a propósito: la parte que decide el
+    color se verifica entera sin red, y es la que importa. **Sin respuesta,
+    `no sé`. Nunca `verde`.**
     """
     if not respuesta:
-        return {"estado": "no sé", "motivo": MOTIVO_CI, "detalle": ""}
+        return {"estado": "no sé", "motivo": motivo or "no hubo respuesta",
+                "detalle": ""}
     if not isinstance(respuesta, dict):
-        return {"estado": "no sé", "motivo": "respuesta ininteligible", "detalle": ""}
+        return {"estado": "no sé", "motivo": "respuesta ininteligible",
+                "detalle": ""}
     estado_bruto = (respuesta.get("status") or "").lower()
     conclusion = (respuesta.get("conclusion") or "").lower()
     if estado_bruto and estado_bruto != "completed":
@@ -577,27 +535,13 @@ def interpretar_ci(respuesta):
     if conclusion in ("cancelled", "skipped", "neutral", "action_required"):
         return {"estado": "no sé", "motivo": "la corrida no concluyó",
                 "detalle": conclusion}
-    return {"estado": "no sé", "motivo": MOTIVO_CI, "detalle": conclusion}
-
-
-def estado_ci(proyecto, respuesta=None):
-    """Hoy, siempre `no sé` — y ése es el resultado correcto, no una falta.
-
-    Un tablero que pinta el CI de verde cuando no lo pudo leer miente
-    exactamente en el caso que importa: el de la rama que rompió algo.
-    """
-    return interpretar_ci(respuesta)
+    return {"estado": "no sé", "motivo": motivo or "la respuesta no dice nada",
+            "detalle": conclusion}
 
 
 # ----------------------------------------------------------------------------
-# 6 · Un proyecto entero, y la lista de proyectos vigilados
+# 5 · Un proyecto entero, y la lista de proyectos vigilados
 # ----------------------------------------------------------------------------
-
-def _ruta(base, rel):
-    if not rel:
-        return ""
-    return rel if os.path.isabs(rel) else os.path.join(base, rel)
-
 
 def normalizar_proyecto(d):
     """Los valores por defecto de una entrada de `proyectos.json`.
@@ -607,12 +551,14 @@ def normalizar_proyecto(d):
     configuración. Los demás sí, porque son la convención del template.
     """
     return {
-        "nombre": d.get("nombre") or os.path.basename(str(d.get("ruta", "")).rstrip("/")),
-        "ruta": d.get("ruta") or "",
+        "nombre": d.get("nombre") or d.get("repo") or "(sin nombre)",
+        "repo": (d.get("repo") or "").strip(),
+        "motivo_sin_repo": d.get("motivo_sin_repo") or "",
+        "token": d.get("token") or "",
         "seguimiento": d.get("seguimiento") or "SEGUIMIENTO.md",
         "roles": d.get("roles", "ops/60-roles.md"),
-        "marcas": d.get("marcas", "panel/agentes.jsonl"),
-        "total_aserciones": d.get("total_aserciones", "pruebas/total-aserciones.txt"),
+        "total_aserciones": d.get("total_aserciones",
+                                  "pruebas/total-aserciones.txt"),
         "rama_principal": d.get("rama_principal") or "main",
         "secciones": d.get("secciones") or {},
     }
@@ -621,12 +567,10 @@ def normalizar_proyecto(d):
 def leer_proyectos(ruta_json):
     """La lista de proyectos vigilados.
 
-    Las rutas relativas se resuelven contra la carpeta del propio
-    `proyectos.json`, y eso no es comodidad: **la misma carpeta está montada en
-    dos rutas distintas** —`/Users/Acer/Documents/…` en la Mac y `/sessions/…`
-    en el contenedor de un agente—. Una ruta absoluta ahí deja andando a uno y
-    roto al otro, que es la lección que ERP 360 ya pagó en `.git/config`
-    (`ops/70-credenciales.md`, «Lo mismo sirve en la Mac y en el contenedor»).
+    Desde el 2026-08-06 un proyecto se identifica por `owner/repo` y no por una
+    ruta. **La ruta se fue a propósito**: la carpeta local no ve al agente que
+    corre en otra máquina, y el día que `ERP360-Template/` desapareció de la
+    Mac capataz se quedó ciego con el repositorio entero publicado en GitHub.
     """
     if not os.path.isfile(ruta_json):
         return []
@@ -637,34 +581,51 @@ def leer_proyectos(ruta_json):
         return []
     if isinstance(datos, dict):
         datos = datos.get("proyectos") or []
-    aqui = os.path.dirname(os.path.abspath(ruta_json))
-    salida = []
-    for d in datos:
-        if not isinstance(d, dict):
-            continue
-        p = normalizar_proyecto(d)
-        if p["ruta"] and not os.path.isabs(p["ruta"]):
-            p["ruta"] = os.path.normpath(os.path.join(aqui, p["ruta"]))
-        salida.append(p)
-    return salida
+    return [normalizar_proyecto(d) for d in datos if isinstance(d, dict)]
 
 
-def mirar(proy, ahora=None):
-    """Todo lo que capataz sabe de un proyecto. No escribe nada."""
+def mirar(proy, repo, ahora=None):
+    """Todo lo que capataz sabe de un proyecto. `repo` es lo que trajo `nube`.
+
+    Es una función pura: mismos argumentos, misma salida, sin red y sin disco.
+    Por eso el arnés puede armar el caso del repositorio que no se pudo leer
+    sin tener que romper nada.
+    """
     proy = normalizar_proyecto(proy)
-    base = proy["ruta"]
-    seg = leer_seguimiento(_ruta(base, proy["seguimiento"]), proy["secciones"])
+    ahora = time.time() if ahora is None else ahora
+    repo = repo or {}
+    archivos = repo.get("archivos") or {}
+
+    def texto(clave):
+        d = archivos.get(clave) or {}
+        return d.get("texto")
+
+    seg = analizar_seguimiento(texto("seguimiento"), proy["secciones"], ahora)
     puntos = seg["puntos"]
-    roles = leer_roles(_ruta(base, proy["roles"])) if proy["roles"] else None
-    marcas = leer_marcas(_ruta(base, proy["marcas"])) if proy["marcas"] else []
-    vivos = activos(marcas, ahora)
-    ramas = leer_ramas(base, proy["total_aserciones"], proy["rama_principal"])
+    roles = analizar_roles(texto("roles"))
+    ramas = repo.get("ramas") if repo.get("ok") else None
+    for r in (ramas or ()):
+        r["estado"] = estado_rama(r, ahora)
+        r["hace_seg"] = _hace(r.get("ts"), ahora)
+    equipo = cuadrilla(ramas, puntos, ahora)
+    commits = (repo.get("commits") or [])[:ULTIMOS_COMMITS]
+    for c in commits:
+        c["hace_seg"] = _hace(c.get("ts"), ahora)
     return {
         "nombre": proy["nombre"],
-        "ruta": base,
-        "existe": os.path.isdir(base) if base else False,
+        "repo": proy["repo"],
+        "url": repo.get("url", ""),
+        "nube": {
+            "ok": bool(repo.get("ok")),
+            "error": repo.get("error", ""),
+            "rancio": bool(repo.get("rancio")),
+            "sin_repo": bool(repo.get("sin_repo")),
+            "leido_en": repo.get("leido_en"),
+        },
         "seguimiento": {"archivo": proy["seguimiento"],
-                        "existe": seg["existe"], "error": seg["error"],
+                        "existe": seg["existe"],
+                        "error": ("" if seg["existe"]
+                                  else _por_que_falta(proy, repo)),
                         "tablas_ignoradas": seg.get("tablas_ignoradas", 0),
                         "repetidos": seg.get("repetidos", [])},
         "cuenta_abiertos": contar(puntos, solo_abiertos=True),
@@ -673,13 +634,23 @@ def mirar(proy, ahora=None):
         "pendientes_de_pablo": pendientes_de_pablo(puntos),
         "sin_estado": [p for p in puntos if p["estado"] == SIN_ESTADO],
         "roles": roles,
-        "cuadrilla": vivos,
-        "por_rol": por_rol(vivos, roles),
-        "marcas": marcas[-ULTIMAS_MARCAS:][::-1],
+        "cuadrilla": equipo,
+        "por_rol": por_rol(equipo, roles),
         "ramas": ramas,
-        "ci": estado_ci(proy),
+        "commits": commits,
+        "ci": interpretar_ci(repo.get("ci"), repo.get("motivo_ci", "")),
     }
 
 
-def mirar_todo(proyectos, ahora=None):
-    return [mirar(p, ahora) for p in proyectos]
+def _por_que_falta(proy, repo):
+    """Por qué no hay seguimiento — **con el dato que se buscó**.
+
+    Un proyecto mal configurado tiene que verse como un error que dice qué
+    buscó, no como un proyecto sin puntos pendientes. Son cosas opuestas y en
+    la pantalla se parecen demasiado.
+    """
+    if repo.get("error"):
+        return repo["error"]
+    return ("el repositorio se leyó, pero no tiene «%s» en la rama %s de %s"
+            % (proy["seguimiento"], proy["rama_principal"],
+               repo.get("url") or proy["repo"] or "(sin repo)"))

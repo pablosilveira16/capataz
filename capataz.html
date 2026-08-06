@@ -65,6 +65,17 @@ h3 { font-size: 12px; margin: 12px 0 5px; text-transform: uppercase;
         color: #98a2b8; }
 .rojo  { border-color: #7a2020; background: #2a1212; color: #ffc9c9; }
 .verde { border-color: #245c34; background: #12251a; color: #b6f0c6; }
+.ambar { border-color: #7a5a1a; background: #2a2212; color: #f0dca6; }
+
+/* Prendido o caído. Los tres colores de un agente, y son tres a propósito:
+   «dudoso» es el rato en que capataz no sabe, y pintarlo de cualquiera de los
+   otros dos sería afirmar algo. */
+.r-trabajando { border-color: #1e6b4f; background: #122b22; color: #a6f0d2; }
+.r-dudoso     { border-color: #7a5a1a; background: #2a2212; color: #f0dca6; }
+.r-caido      { border-color: #7a2020; background: #2a1212; color: #ffc9c9; }
+.r-integrada  { border-color: #3a3f52; color: #98a2b8; }
+.r-principal  { border-color: #3a3f52; color: #98a2b8; }
+.r-sinrama    { border-style: dashed; border-color: #55607a; color: #98a2b8; }
 
 ul { list-style: none; margin: 0; padding: 0; }
 li { padding: 7px 0; border-top: 1px solid #262b38; }
@@ -89,7 +100,8 @@ details p { font-size: 11px; color: #8b93a7; margin: 5px 0 0; }
   <div class="tenue" id="cabecera">leyendo…</div>
   <div id="cuerpo"></div>
   <div class="pie muy-tenue">
-    Capataz sólo lee. El SEGUIMIENTO de cada proyecto es la verdad; git es el árbitro.
+    Capataz sólo lee, y lee de GitHub. El SEGUIMIENTO de cada repositorio es la
+    verdad; git es el árbitro.
   </div>
 </div>
 <!--DATOS-INCRUSTADOS-->
@@ -100,6 +112,15 @@ var CLASE = {
   "pendiente": "e-pendiente", "en curso": "e-encurso", "hecho": "e-hecho",
   "diferido": "e-diferido", "descartado": "e-descartado",
   "sin estado": "e-sinestado"
+};
+/* Prendido o caído. Es la lectura que motiva la tanda: «al observar
+   variaciones en vivo va a poder ver los agentes que se prenden y apagan».
+   `dudoso` tiene su propia clase porque NO es ni verde ni rojo: es el rato en
+   que un agente pensando y uno caído se parecen, y capataz no elige. */
+var CLASE_RAMA = {
+  "trabajando": "r-trabajando", "dudoso": "r-dudoso", "caído": "r-caido",
+  "integrada": "r-integrada", "principal": "r-principal",
+  "sin rama": "r-sinrama", "no sé": "nose"
 };
 
 function esc(t) {
@@ -126,6 +147,17 @@ function antiguedad(dias) {
   return "hace " + dias + (dias === 1 ? " día" : " días");
 }
 
+/* Hace cuánto se movió algo, en la unidad que se lee de un vistazo. «hace 2 h»
+   y «hace 3 min» dicen cosas muy distintas de un agente y los dos tienen que
+   caber en una línea de 360 px. */
+function hace(seg) {
+  if (seg === null || seg === undefined) return "hace cuánto: no sé";
+  if (seg < 90) return "hace " + Math.round(seg) + " s";
+  if (seg < 5400) return "hace " + Math.round(seg / 60) + " min";
+  if (seg < 172800) return "hace " + Math.round(seg / 3600) + " h";
+  return "hace " + Math.round(seg / 86400) + " días";
+}
+
 function listaPuntos(puntos, umbralViejo) {
   if (!puntos.length) return '<div class="nada">ninguno</div>';
   var h = "<ul>";
@@ -144,16 +176,26 @@ function listaPuntos(puntos, umbralViejo) {
 
 function bloqueCuadrilla(pr) {
   var h = "<h3>La cuadrilla ahora</h3>";
+  if (pr.ramas === null) {
+    /* Sin poder leer el repositorio no se sabe quién trabaja. Decir «nadie»
+       sería la mentira de la regla 3: se lee igual que «todo tranquilo». */
+    return h + '<div class="chips">' + chipNoSe("quién trabaja") + '</div>';
+  }
   if (!pr.cuadrilla.length) {
-    h += '<div class="nada">nadie trabajando</div>';
+    h += '<div class="nada">ninguna rama con trabajo sin integrar, y ningún ' +
+         'punto en curso: nadie trabajando</div>';
   } else {
     h += "<ul>";
     for (var i = 0; i < pr.cuadrilla.length; i++) {
       var a = pr.cuadrilla[i];
       h += '<li><span class="id">' + esc(a.quien) + '</span>' +
            '<span class="titulo">' + esc(a.que) + '</span>' +
-           '<div class="meta">' + esc(a.rol || "sin rol") + ' · hace ' +
-           esc(a.hace_min) + ' min</div></li>';
+           '<div class="chips"><span class="chip ' +
+           (CLASE_RAMA[a.estado] || "nose") + '">' + esc(a.estado) +
+           '</span></div>' +
+           '<div class="meta">' + esc(a.rol || "sin rol") + ' · ' +
+           esc(hace(a.hace_seg)) + '</div>' +
+           '<div class="meta">' + esc(a.asunto) + '</div></li>';
     }
     h += "</ul>";
   }
@@ -167,18 +209,18 @@ function bloqueCuadrilla(pr) {
   h += "</div>";
   if (!pr.por_rol.conocidos) {
     h += '<div class="chips">' + chipNoSe("qué roles existen") + '</div>' +
-         '<div class="muy-tenue">Este proyecto no tiene <code>ops/60-roles.md</code>, ' +
+         '<div class="muy-tenue">Este repositorio no trae <code>ops/60-roles.md</code>, ' +
          'así que la lista de roles no se sabe. No se inventa la de otro proyecto.</div>';
   }
   return h;
 }
 
 function bloqueRamas(pr) {
-  var h = "<h3>Ramas</h3>";
+  var h = "<h3>Ramas en GitHub</h3>";
   if (pr.ramas === null) {
     return h + '<div class="chips">' + chipNoSe("ramas") + '</div>' +
-           '<div class="muy-tenue">No es un repositorio git, así que no hay ramas ' +
-           'que mirar ni total que comparar.</div>';
+           '<div class="muy-tenue">No se pudo leer el repositorio, así que no ' +
+           'hay ramas que mirar ni total que comparar.</div>';
   }
   if (!pr.ramas.length) return h + '<div class="nada">ninguna</div>';
   h += "<ul>";
@@ -199,12 +241,29 @@ function bloqueRamas(pr) {
     }
     h += '<li><span class="id">' + esc(r.nombre) + '</span>' +
          (r.punto ? '<span class="titulo">punto ' + esc(r.punto) + '</span>' : '') +
-         '<div class="chips">' + tot + '</div>' +
-         '<div class="meta">' + esc(r.fecha) + ' · ' + esc(r.autor) +
+         '<div class="chips"><span class="chip ' +
+         (CLASE_RAMA[r.estado] || "nose") + '">' + esc(r.estado) + '</span>' +
+         tot + '</div>' +
+         '<div class="meta">' + esc(hace(r.hace_seg)) + ' · ' + esc(r.autor) +
+         ' · ' + esc(r.sha) +
          (r.commits_adelante === null ? '' :
           ' · ' + esc(r.commits_adelante) + ' adelante / ' +
           esc(r.commits_atras) + ' atrás de main') + '</div>' +
          '<div class="meta">' + esc(r.asunto) + '</div></li>';
+  }
+  return h + "</ul>";
+}
+
+function bloqueCommits(pr) {
+  if (!pr.commits || !pr.commits.length) return "";
+  var h = "<h3>Últimos commits</h3><ul>";
+  for (var i = 0; i < pr.commits.length; i++) {
+    var c = pr.commits[i];
+    h += '<li><span class="id">' + esc(c.autor) + '</span>' +
+         '<span class="titulo">' + esc(c.asunto) + '</span>' +
+         '<div class="meta">' + esc(c.sha) + ' · ' +
+         esc(hace(c.hace_seg === undefined ? null : c.hace_seg)) +
+         '</div></li>';
   }
   return h + "</ul>";
 }
@@ -223,13 +282,31 @@ function bloqueCI(pr) {
 
 function tarjeta(pr) {
   var h = '<div class="tarjeta"><h2>' + esc(pr.nombre) + "</h2>" +
-          '<div class="muy-tenue">' + esc(pr.ruta) + " · " +
+          '<div class="muy-tenue">' +
+          esc(pr.repo ? "github.com/" + pr.repo : "sin repositorio") + " · " +
           esc(pr.seguimiento.archivo) + "</div>";
 
+  /* Un proyecto declarado sin repositorio NO es un error y no se pinta rojo:
+     es un estado, y tiene su motivo escrito en `proyectos.json`. Pintarlo de
+     rojo sería el aviso que sale siempre, que enseña a ignorar los avisos. */
+  if (pr.nube.sin_repo) {
+    return h + '<div class="chips"><span class="chip nose">sin publicar · ' +
+           'no sé</span></div><div class="muy-tenue">' +
+           esc(pr.nube.error) + "</div></div>";
+  }
+
   if (!pr.seguimiento.existe) {
-    return h + '<div class="chips"><span class="chip rojo">no encuentro el ' +
-           'seguimiento</span></div><div class="muy-tenue">' +
+    return h + '<div class="chips"><span class="chip rojo">no pude leer el ' +
+           'repositorio</span></div><div class="muy-tenue">' +
            esc(pr.seguimiento.error) + "</div></div>";
+  }
+
+  /* Un espejo que no se pudo refrescar sigue sirviendo, y dice que está viejo.
+     Es la tercera cosa entre «al día» y «no sé», y las tres son distintas. */
+  if (pr.nube.rancio) {
+    h += '<div class="chips"><span class="chip ambar">datos de antes · el ' +
+         'último refresco falló</span></div>' +
+         '<div class="muy-tenue">' + esc(pr.nube.error) + '</div>';
   }
 
   h += "<h3>Puntos abiertos</h3><div class=\"chips\">";
@@ -252,6 +329,7 @@ function tarjeta(pr) {
 
   h += bloqueCuadrilla(pr);
   h += bloqueRamas(pr);
+  h += bloqueCommits(pr);
   h += bloqueCI(pr);
 
   var rep = pr.seguimiento.repetidos.filter(function (r) { return r.discrepa; });
@@ -271,12 +349,13 @@ function pintar(d) {
   document.getElementById("cabecera").textContent =
     d.cuando + " · " + d.proyectos.length + " proyecto" +
     (d.proyectos.length === 1 ? "" : "s") + " vigilado" +
-    (d.proyectos.length === 1 ? "" : "s");
+    (d.proyectos.length === 1 ? "" : "s") + " en GitHub";
   var h = "";
   if (d.sin_proyectos) {
     h = '<div class="tarjeta"><h2>Ningún proyecto vigilado</h2>' +
-        '<div class="tenue">Agregá uno en <code>proyectos.json</code>: la ruta y ' +
-        'el nombre de su archivo de seguimiento, porque no todos se llaman igual.</div></div>';
+        '<div class="tenue">Agregá uno en <code>proyectos.json</code>: el ' +
+        '<code>owner/repo</code> de GitHub y el nombre de su archivo de ' +
+        'seguimiento, porque no todos se llaman igual.</div></div>';
   }
   for (var i = 0; i < d.proyectos.length; i++) h += tarjeta(d.proyectos[i]);
   document.getElementById("cuerpo").innerHTML = h;

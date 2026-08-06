@@ -6,12 +6,16 @@
 Sirve dos cosas y nada más:
 
     /              capataz.html, la pantalla — pensada para un teléfono
-    /api/estado    lo que `lector.py` sabe de cada proyecto vigilado, en JSON
+    /api/estado    lo que capataz sabe de cada proyecto vigilado, en JSON
+
+**Capataz mira la nube.** Desde el 2026-08-06 los datos salen de GitHub y no de
+ninguna carpeta local: `nube.py` los trae por git y `lector.py` los entiende.
+Las dos mitades están separadas porque una se prueba contra los repositorios de
+verdad y la otra sin red — el porqué está escrito arriba de cada archivo.
 
 **No hay POST.** No es un olvido: es la regla 1 de `CLAUDE.md` puesta en la
 puerta. El panel de ERP 360 tiene un `POST /api/marca` porque *escribe* las
-marcas; capataz no escribe ninguna, así que no tiene por dónde. Lo que quiera
-marcar algo usa el `panel/agente.py` de su propio proyecto.
+marcas; capataz no escribe ninguna, así que no tiene por dónde.
 
 Sin dependencias: sólo biblioteca estándar, como `panel/panel.py` de ERP 360.
 El motivo está en el andamio —un proyecto que necesita instalar algo para
@@ -28,6 +32,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import lector
+import nube
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 PROYECTOS = os.environ.get("CAPATAZ_PROYECTOS") or os.path.join(AQUI, "proyectos.json")
@@ -39,11 +44,31 @@ PAGINA = os.path.join(AQUI, "capataz.html")
 PUERTO_POR_DEFECTO = 5402
 PUERTO = int(os.environ.get("CAPATAZ_PUERTO", PUERTO_POR_DEFECTO))
 
-# La pantalla se refresca sola cada 15 s y cada refresco corre unos cuantos
-# `git` sobre cada proyecto. Esto es una foto de hace un rato, no un estado:
-# se descarta entera y se vuelve a leer del disco. Capataz no guarda nada.
+# La pantalla se refresca sola cada 15 s. Esta caché es de la vista armada; la
+# que decide cada cuánto se le vuelve a preguntar a GitHub es `nube.REFRESCO`,
+# y son dos cosas distintas: armar la vista es gratis, salir a la red no.
+#
+# Las dos son fotos de hace un rato y ninguna es un estado: se descartan
+# enteras y se vuelven a leer. Capataz no guarda nada que no esté en GitHub.
 CACHE_SEG = 5
 _cache = {"ts": 0.0, "datos": None}
+
+
+def _mirar(proy, ahora):
+    """Un proyecto: traerlo de la nube y entenderlo. Y el CI, si está prendido.
+
+    El CI es el único dato que git no puede contestar y por el que hay que ir a
+    `api.github.com` —que desde el contenedor de un agente no se alcanza—. Por
+    eso va detrás de `CAPATAZ_CI=1` y **sin ella el resultado se queda en «no
+    sé», nunca en verde**.
+    """
+    datos = nube.leer(proy, ahora=ahora)
+    respuesta, motivo = nube.pedir_ci(
+        proy.get("repo") or "", proy.get("rama_principal") or "main",
+        nube._archivo_token(proy))
+    datos["ci"] = respuesta
+    datos["motivo_ci"] = motivo
+    return lector.mirar(proy, datos, ahora)
 
 
 def estado():
@@ -56,7 +81,8 @@ def estado():
         "cuando": time.strftime("%Y-%m-%d %H:%M:%S"),
         "config": PROYECTOS,
         "puerto": PUERTO,
-        "proyectos": lector.mirar_todo(proyectos, ahora),
+        "espejos": nube.ESPEJOS,
+        "proyectos": [_mirar(p, ahora) for p in proyectos],
         "sin_proyectos": not proyectos,
     }
     _cache["ts"] = ahora
@@ -128,6 +154,7 @@ if __name__ == "__main__":
     print("\n  Capataz  ->  http://127.0.0.1:%d\n" % PUERTO)
     print("  Proyectos vigilados: %s" % PROYECTOS)
     for p in lector.leer_proyectos(PROYECTOS):
-        print("    · %-12s %s" % (p["nombre"], p["ruta"]))
+        print("    · %-12s %s" % (p["nombre"], p["repo"] or "(sin repo)"))
+    print("  Espejos de sólo lectura en: %s" % nube.ESPEJOS)
     print("\n  Capataz sólo lee. No marca puntos, no lanza agentes.\n")
     ThreadingHTTPServer(("127.0.0.1", PUERTO), Capataz).serve_forever()

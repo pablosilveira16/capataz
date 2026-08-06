@@ -32,7 +32,12 @@ correr() {
 }
 
 echo
-for f in verificar-lector.py verificar-angosto.py verificar-credenciales.py; do
+# `verificar-nube.py` sale a **github.com de verdad** y clona los repositorios
+# vigilados. Es el único que necesita red, y es el que vale de la tanda del
+# 2026-08-06: un lector de red probado sólo contra respuestas grabadas pasa
+# entero con la red rota. Si no hay salida, se pone rojo — no saltea.
+for f in verificar-lector.py verificar-nube.py verificar-angosto.py \
+         verificar-credenciales.py; do
   [ -f "pruebas/$f" ] && correr "$f" python3; done
 for f in verificar-contrato.sh; do
   correr "$f" bash; done

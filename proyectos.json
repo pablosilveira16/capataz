@@ -3,14 +3,29 @@
     "Los proyectos que capataz vigila. Es lo único configurable, y es texto:",
     "lo binario no se revisa en un diff.",
     "",
-    "· ruta            relativa a esta carpeta. La misma carpeta está montada en",
-    "                  dos rutas distintas (la Mac y el contenedor de un agente),",
-    "                  así que una ruta absoluta deja andando a uno y roto al otro.",
-    "· seguimiento     el nombre del archivo, porque NO todos se llaman igual.",
-    "· roles           de dónde salen los tipos de agente. Si el archivo no está,",
-    "                  capataz dice «no sé» en vez de inventar la lista de seis.",
-    "· total_aserciones  el total MEDIDO que dejó ./verificar.sh. Si no está, la",
-    "                  pantalla dice «no sé»: un total escrito en prosa no vale.",
+    "Desde el 2026-08-06 un proyecto es un REPOSITORIO DE GITHUB y no una",
+    "carpeta. El motivo entero está en `nube.py` y en `BITACORA.md`, Tanda 2;",
+    "el resumen: un agente puede correr en cualquier máquina y su trabajo se ve",
+    "cuando empuja, `git push` ya es el árbitro, y el día que la carpeta",
+    "`ERP360-Template/` desapareció de la Mac capataz se quedó ciego con el",
+    "repositorio entero publicado en GitHub.",
+    "",
+    "· repo            `owner/repo`, tal cual. NO una ruta y NO una URL: si acá",
+    "                  hay otra cosa, la tarjeta muestra el error con lo que",
+    "                  buscó, que es lo accionable. `null` es un caso aparte y",
+    "                  está explicado abajo, en Finca 360.",
+    "· token           el archivo de credencial, en `../.credenciales/`. Va por",
+    "                  proyecto porque **un token, un repositorio**",
+    "                  (`ops/70-credenciales.md`). Si falta, se usa",
+    "                  `github-capataz.token`.",
+    "· seguimiento     el nombre del archivo EN EL REPO, porque NO todos se",
+    "                  llaman igual. Se lee de la rama principal.",
+    "· roles           de dónde salen los tipos de agente. Si el archivo no está",
+    "                  en el repo, capataz dice «no sé» en vez de inventar la",
+    "                  lista de seis.",
+    "· total_aserciones  el total MEDIDO que dejó ./verificar.sh, leído de CADA",
+    "                  rama. Si no está, la pantalla dice «no sé»: un total",
+    "                  escrito en prosa no vale.",
     "· secciones       sólo para los seguimientos cuyas tablas NO tienen columna",
     "                  Estado. Es interpretación de capataz sobre el archivo de",
     "                  otro, así que se declara acá y no se esconde en el código."
@@ -18,20 +33,30 @@
   "proyectos": [
     {
       "nombre": "ERP 360",
-      "ruta": "../ERP360-Template",
+      "repo": "pablosilveira16/erp360",
+      "token": "github-erp360.token",
       "seguimiento": "SEGUIMIENTO.md",
       "roles": "ops/60-roles.md",
-      "marcas": "panel/agentes.jsonl",
+      "total_aserciones": "pruebas/total-aserciones.txt",
+      "rama_principal": "main",
+      "secciones": {}
+    },
+    {
+      "nombre": "Capataz",
+      "repo": "pablosilveira16/capataz",
+      "token": "github-capataz.token",
+      "seguimiento": "SEGUIMIENTO.md",
+      "roles": "ops/60-roles.md",
       "total_aserciones": "pruebas/total-aserciones.txt",
       "rama_principal": "main",
       "secciones": {}
     },
     {
       "nombre": "Finca 360",
-      "ruta": "../Finca360",
+      "repo": null,
+      "motivo_sin_repo": "Finca 360 es un repositorio git local (cf6add0) y NO está publicado en GitHub, así que desde la nube no hay nada que leer. Queda declarado y no se lo saca de la lista: borrarlo dejaría el hecho de que existe y está sin publicar escrito en ningún lado, y capataz diría que vigila dos proyectos cuando son tres. El día que se publique, esta línea pasa a ser un `repo` y nada más. → punto T12",
       "seguimiento": "Finca360 — Seguimiento.md",
       "roles": "ops/60-roles.md",
-      "marcas": "panel/agentes.jsonl",
       "total_aserciones": "pruebas/total-aserciones.txt",
       "rama_principal": "main",
       "secciones": {
@@ -39,16 +64,6 @@
         "Se puede hacer sin preguntar": "pendiente",
         "Decidido, esperando el momento": "diferido"
       }
-    },
-    {
-      "nombre": "Capataz",
-      "ruta": ".",
-      "seguimiento": "SEGUIMIENTO.md",
-      "roles": "ops/60-roles.md",
-      "marcas": "panel/agentes.jsonl",
-      "total_aserciones": "pruebas/total-aserciones.txt",
-      "rama_principal": "main",
-      "secciones": {}
     }
   ]
 }

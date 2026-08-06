@@ -6,19 +6,17 @@
  * cada proyecto la dibuja el JavaScript de `capataz.html` en el navegador: el
  * archivo estático trae los datos y un `<div id="cuerpo">` vacío. O sea que la
  * regla 3 de `CLAUDE.md` —«lo que no se sabe se muestra no sé, nunca verde»—
- * estaba verificada en el lector (`interpretar_ci` devuelve «no sé») y **no en
- * la pantalla**, que es donde alguien la lee. Entre las dos cosas hay una
- * función, `bloqueCI`, y una línea que decide la clase CSS.
- *
- * Un tablero que miente justo cuando no sabe es peor que no tenerlo, así que esa
- * línea merece que alguien la ejecute.
+ * estaría verificada en el lector y **no en la pantalla**, que es donde alguien
+ * la lee. Entre las dos cosas hay una función y una línea que decide la clase
+ * CSS. Un tablero que miente justo cuando no sabe es peor que no tenerlo, así
+ * que esa línea merece que alguien la ejecute.
  *
  * Cómo: se saca el `<script>` de `capataz.html`, se lo corre en un `vm` con un
  * DOM mínimo, y se le pasan **los datos de verdad** —los que produce
- * `capataz.estado()` sobre los proyectos vigilados— capturando el HTML que
- * escribe. No se lee ni una cadena del archivo: se mira lo que dibujó.
+ * `capataz.estado()` leyendo GitHub— capturando el HTML que escribe. No se lee
+ * ni una cadena del archivo: se mira lo que dibujó.
  *
- * Las tres aserciones que sostienen a las demás:
+ * Las secciones que sostienen a las demás:
  *
  *   § 2  con los datos reales, el CI de cada proyecto dice «no sé» y su chip
  *        NO lleva la clase verde;
@@ -26,7 +24,9 @@
  *        igual con una pantalla que no pinta verde nunca, que es la definición
  *        de aserción vacua;
  *   § 4  un total de aserciones que no se sabe se dibuja «no sé» y no «0»: un
- *        cero se lee como «no hay» y esto es «no sé», que es otra cosa.
+ *        cero se lee como «no hay» y esto es «no sé», que es otra cosa;
+ *   § 6  prendido o caído: los tres colores de un agente, y que «dudoso» no
+ *        sea ninguno de los dos.
  *
  *     node pruebas/verificar-pantalla.js
  */
@@ -52,8 +52,8 @@ function af(descripcion, condicion, detalle) {
 
 // --- los datos de verdad, producidos por el mismo código que sirve la API ----
 //
-// No es un JSON escrito a mano: es `capataz.estado()`, leyendo los proyectos
-// vigilados del disco. Si mañana el lector devuelve otra forma, esto se entera.
+// No es un JSON escrito a mano: es `capataz.estado()`, leyendo los repositorios
+// vigilados de GitHub. Si mañana el lector devuelve otra forma, esto se entera.
 const datos = JSON.parse(execFileSync(
   "python3",
   ["-c", "import json,capataz; print(json.dumps(capataz.estado(), default=str))"],
@@ -94,6 +94,8 @@ function pintarCon(d) {
   return nodos;
 }
 
+function copia(x) { return JSON.parse(JSON.stringify(x)); }
+
 console.log("\n§ 1 · La pantalla dibuja algo con los datos de verdad");
 const pintado = pintarCon(datos);
 af("hay al menos un proyecto vigilado que mirar",
@@ -106,12 +108,11 @@ af("la cabecera dice cuántos proyectos y cuándo",
    pintado.cabecera.textContent);
 /* **Una aserción por comprobación, no una por proyecto.** El total de
  * aserciones es parte del resultado, y con un `forEach` que suma una por
- * proyecto el total dependería de cuántas carpetas hay al lado — se midió: 274
- * en la carpeta de trabajo y 260 en un clon sin vecinos, como el del CI, sin
- * que nada hubiera cambiado. Un número que se mueve solo deja de servir para
- * comparar una rama con main. Agrupado da el mismo número de los dos lados, y
- * **el detalle dice cuáles fallaron**, que es lo que uno necesita para
- * arreglarlo. */
+ * proyecto el total dependería de cuántos repositorios haya configurados — se
+ * midió: 274 en la carpeta de trabajo y 260 en un clon sin vecinos, como el del
+ * CI, sin que nada hubiera cambiado. Un número que se mueve solo deja de servir
+ * para comparar una rama con main. Agrupado da el mismo número de los dos
+ * lados, y **el detalle dice cuáles fallaron**. */
 function todos(descripcion, lista, prueba) {
   const malos = lista.filter(function (p) { return !prueba(p); })
                      .map(function (p) { return p.nombre; });
@@ -122,31 +123,55 @@ function todos(descripcion, lista, prueba) {
 todos("cada proyecto vigilado tiene su tarjeta dibujada", datos.proyectos,
       function (p) { return pintado.cuerpo.innerHTML.indexOf(">" + p.nombre + "<") >= 0; });
 
-/* Los proyectos cuyo seguimiento SÍ se pudo leer. En el CI no hay ninguno de
- * los vecinos —el checkout trae capataz solo—, y una tarjeta que no encontró su
- * archivo dibuja el aviso rojo en vez de los chips. Sin este corte, este arnés
- * se pondría rojo en el CI por algo que no es un bug; con él, sigue habiendo
- * una aserción de que quedó al menos uno que mirar. */
+/* Los proyectos cuyo seguimiento SÍ se pudo leer. En el runner del CI no hay
+ * credencial para los repositorios privados y Finca 360 no está publicado, así
+ * que la lista de acá cambia según dónde se corra — y por eso todo lo de abajo
+ * va agrupado. Sin este corte, este arnés se pondría rojo en el CI por algo que
+ * no es un bug; con él, sigue habiendo una aserción de que quedó al menos uno
+ * que mirar. */
 const legibles = datos.proyectos.filter(function (p) { return p.seguimiento.existe; });
 af("hay al menos un proyecto con el seguimiento legible (si no, § 2 no mira nada)",
    legibles.length >= 1, String(legibles.length));
 
-/* Y el caso contrario, armado a mano para que se ejercite siempre: un proyecto
- * que capataz no encuentra tiene que DECIRLO, no dibujar una tarjeta vacía que
- * se lee como «no hay nada pendiente». */
-const perdido = JSON.parse(JSON.stringify(datos));
-perdido.proyectos = [JSON.parse(JSON.stringify(datos.proyectos[0]))];
-perdido.proyectos[0].nombre = "Se mudó";
+/* Y el caso contrario, armado a mano para que se ejercite siempre: un
+ * repositorio que capataz no pudo leer tiene que DECIRLO, no dibujar una
+ * tarjeta vacía que se lee como «no hay nada pendiente». */
+const perdido = copia(datos);
+perdido.proyectos = [copia(datos.proyectos[0])];
+perdido.proyectos[0].nombre = "No llegué";
+perdido.proyectos[0].nube = { ok: false, error: "x", rancio: false, sin_repo: false };
 perdido.proyectos[0].seguimiento.existe = false;
-perdido.proyectos[0].seguimiento.error = "no encuentro /ruta/vieja/SEGUIMIENTO.md";
+perdido.proyectos[0].seguimiento.error =
+  "no existe github.com/pablosilveira16/fantasma, o el token no lo alcanza";
 const htmlPerdido = pintarCon(perdido).cuerpo.innerHTML;
-af("un proyecto sin seguimiento lo dice, en rojo",
+af("un repositorio que no se pudo leer lo dice, en rojo",
    /class="chip rojo"/.test(htmlPerdido) &&
-   htmlPerdido.indexOf("no encuentro el seguimiento") >= 0, htmlPerdido.slice(0, 300));
-af("y muestra la ruta que buscó, que es lo único accionable",
-   htmlPerdido.indexOf("/ruta/vieja/SEGUIMIENTO.md") >= 0);
+   htmlPerdido.indexOf("no pude leer el repositorio") >= 0, htmlPerdido.slice(0, 300));
+af("y muestra lo que buscó, que es lo único accionable",
+   htmlPerdido.indexOf("github.com/pablosilveira16/fantasma") >= 0);
 af("y NO dibuja chips de estados, que se leerían como «no falta nada»",
    htmlPerdido.indexOf("Puntos abiertos") < 0);
+
+/* Un proyecto declarado SIN repositorio —Finca 360, que todavía no está
+ * publicado— no es lo mismo que uno que falló. No se pinta rojo: pintar de rojo
+ * algo que está así a propósito es el aviso que sale siempre, y el corolario de
+ * la regla 3 dice que eso enseña a ignorar los avisos. */
+const sinRepo = copia(datos);
+sinRepo.proyectos = [copia(datos.proyectos[0])];
+sinRepo.proyectos[0].nombre = "Sin publicar";
+sinRepo.proyectos[0].repo = "";
+sinRepo.proyectos[0].nube = { ok: false, error: "todavía no está en GitHub",
+                              rancio: false, sin_repo: true };
+const htmlSinRepo = pintarCon(sinRepo).cuerpo.innerHTML;
+af("un proyecto sin repositorio dice «no sé», no un error",
+   htmlSinRepo.indexOf("sin publicar") >= 0 &&
+   htmlSinRepo.indexOf("no sé") >= 0, htmlSinRepo.slice(0, 300));
+af("y NO se pinta rojo: está así a propósito",
+   !/class="chip rojo"/.test(htmlSinRepo));
+af("ni verde, que sería decir que está todo bien",
+   !/class="chip[^"]*\bverde\b/.test(htmlSinRepo));
+af("con el motivo declarado en proyectos.json a la vista",
+   htmlSinRepo.indexOf("todavía no está en GitHub") >= 0);
 
 /* El bloque de CI de un proyecto, tal como quedó dibujado. Se corta desde el
  * <h3>CI</h3> hasta el final de sus chips: mirar el HTML entero mezclaría el
@@ -164,7 +189,7 @@ console.log("§ 2 · El CI que no se pudo leer no se pinta verde");
 const ci = function (p) { return bloqueCiDe(pintado.cuerpo.innerHTML, p.nombre); };
 todos("cada proyecto legible dibuja su bloque de CI", legibles,
       function (p) { return ci(p).length > 0; });
-todos("el lector dice «no sé» para todos —hoy no hay forma de leerlo—", legibles,
+todos("el lector dice «no sé» para todos —la lectura del CI está apagada—", legibles,
       function (p) { return p.ci.estado === "no sé"; });
 todos("y la pantalla lo muestra como «no sé»", legibles,
       function (p) { return ci(p).indexOf("no sé") >= 0; });
@@ -180,41 +205,44 @@ todos("y trae el porqué a mano, plegado", legibles,
 console.log("§ 3 · …y con un CI verde de verdad, sí se pinta verde");
 /* Sin esta sección, la § 2 pasaría igual con una pantalla que no pinta verde
  * nunca —o que no dibuja el CI—, y sería la aserción vacua de la regla 2. */
-const copia = JSON.parse(JSON.stringify(datos));
-copia.proyectos = [JSON.parse(JSON.stringify(legibles[0]))];
-const nombre0 = copia.proyectos[0].nombre;
+const conCi = copia(datos);
+conCi.proyectos = [copia(legibles[0])];
+const nombre0 = conCi.proyectos[0].nombre;
 
-copia.proyectos[0].ci = { estado: "verde", motivo: "", detalle: "success" };
-let b = bloqueCiDe(pintarCon(copia).cuerpo.innerHTML, nombre0);
+conCi.proyectos[0].ci = { estado: "verde", motivo: "", detalle: "success" };
+let b = bloqueCiDe(pintarCon(conCi).cuerpo.innerHTML, nombre0);
 af("un CI verde se dibuja verde", /class="chip[^"]*\bverde\b/.test(b), b);
 af("y sin el «por qué no se sabe», que ahí sería el aviso que sale siempre",
    b.indexOf("por qué no se sabe") < 0, b);
 
-copia.proyectos[0].ci = { estado: "rojo", motivo: "", detalle: "failure" };
-b = bloqueCiDe(pintarCon(copia).cuerpo.innerHTML, nombre0);
+conCi.proyectos[0].ci = { estado: "rojo", motivo: "", detalle: "failure" };
+b = bloqueCiDe(pintarCon(conCi).cuerpo.innerHTML, nombre0);
 af("un CI rojo se dibuja rojo", /class="chip[^"]*\brojo\b/.test(b), b);
 
 /* «corriendo» no es ninguna de las dos. Es el caso que se cuela si alguien
  * escribe `clase = e === "rojo" ? "rojo" : "verde"`. */
-copia.proyectos[0].ci = { estado: "corriendo", motivo: "", detalle: "in_progress" };
-b = bloqueCiDe(pintarCon(copia).cuerpo.innerHTML, nombre0);
+conCi.proyectos[0].ci = { estado: "corriendo", motivo: "", detalle: "in_progress" };
+b = bloqueCiDe(pintarCon(conCi).cuerpo.innerHTML, nombre0);
 af("«corriendo» no se pinta verde", !/class="chip[^"]*\bverde\b/.test(b), b);
 af("ni rojo", !/class="chip[^"]*\brojo\b/.test(b), b);
 
 console.log("§ 4 · Un total que no se sabe se dibuja «no sé», no «0»");
-const conRamas = JSON.parse(JSON.stringify(datos));
-conRamas.proyectos = [JSON.parse(JSON.stringify(legibles[0]))];
+function ramaFalsa(extra) {
+  return Object.assign({
+    nombre: "x", es_principal: false, punto: "", sha: "abc1234",
+    ts: 1785989327, hace_seg: 600, autor: "coder-1", asunto: "algo",
+    commits_adelante: 1, commits_atras: 0, total: 100, total_main: 100,
+    delta: 0, motivo_sin_total: "", estado: "trabajando"
+  }, extra);
+}
+const conRamas = copia(datos);
+conRamas.proyectos = [copia(legibles[0])];
 conRamas.proyectos[0].ramas = [
-  { nombre: "main", es_principal: true, punto: "", fecha: "2026-08-06",
-    autor: "a", asunto: "x", commits_adelante: 0, commits_atras: 0,
-    total: 100, total_main: 100, delta: 0, motivo_sin_total: "" },
-  { nombre: "t9-baja", es_principal: false, punto: "T9", fecha: "2026-08-06",
-    autor: "a", asunto: "x", commits_adelante: 1, commits_atras: 0,
-    total: 97, total_main: 100, delta: -3, motivo_sin_total: "" },
-  { nombre: "t8-sin-total", es_principal: false, punto: "T8", fecha: "2026-08-06",
-    autor: "a", asunto: "x", commits_adelante: 1, commits_atras: 0,
-    total: null, total_main: 100, delta: null,
-    motivo_sin_total: "no dejó el total medido" }
+  ramaFalsa({ nombre: "main", es_principal: true, estado: "principal",
+              commits_adelante: 0 }),
+  ramaFalsa({ nombre: "t9-baja", punto: "T9", total: 97, delta: -3 }),
+  ramaFalsa({ nombre: "t8-sin-total", punto: "T8", total: null, delta: null,
+              motivo_sin_total: "no dejó el total medido" })
 ];
 const htmlRamas = pintarCon(conRamas).cuerpo.innerHTML;
 const iSin = htmlRamas.indexOf("t8-sin-total");
@@ -223,19 +251,24 @@ af("la rama sin total medido dice «no sé»", filaSin.indexOf("no sé") >= 0, f
 af("y no dibuja un 0, que se leería como «no hay aserciones»",
    !/<b>0<\/b>\s*aserciones/.test(filaSin), filaSin);
 const iBaja = htmlRamas.indexOf("t9-baja");
-const filaBaja = htmlRamas.slice(iBaja, iBaja + 400);
+const filaBaja = htmlRamas.slice(iBaja, iBaja + 500);
 af("una rama que BAJA el total se marca en rojo aunque esté verde",
    /class="chip[^"]*\brojo\b/.test(filaBaja), filaBaja);
 af("y dice cuánto bajó contra main", filaBaja.indexOf("-3 vs main") >= 0, filaBaja);
 
-/* Un proyecto que no es repo git: «no sé», no «ninguna rama». Finca 360 es uno
- * de verdad, así que esto no es un caso inventado. */
+/* Un repositorio que no se pudo leer: «no sé», no «ninguna rama». */
 conRamas.proyectos[0].ramas = null;
-const sinRepo = pintarCon(conRamas).cuerpo.innerHTML;
-af("un proyecto que no es repo git dice «no sé» en ramas",
-   /ramas · no sé/.test(sinRepo));
+const sinRamas = pintarCon(conRamas).cuerpo.innerHTML;
+af("un repositorio que no se leyó dice «no sé» en ramas",
+   /ramas · no sé/.test(sinRamas));
 af("y no dice «ninguna», que sería afirmar que no tiene",
-   sinRepo.indexOf(">ninguna<") < 0);
+   sinRamas.indexOf(">ninguna<") < 0);
+/* Y lo mismo con la cuadrilla, que es el dato nuevo de esta tanda: sin poder
+ * leer el repositorio, «nadie trabajando» se lee igual que «todo tranquilo» y
+ * es exactamente lo contrario de lo que puede estar pasando. */
+af("y en la cuadrilla dice «quién trabaja · no sé», no «nadie trabajando»",
+   sinRamas.indexOf("quién trabaja · no sé") >= 0 &&
+   sinRamas.indexOf("nadie trabajando") < 0, sinRamas.slice(0, 200));
 
 console.log("§ 5 · Los ceros se dibujan, y el texto ajeno se escapa");
 const primero = legibles[0];
@@ -249,8 +282,8 @@ af("y los ceros se marcan con la clase «cero» en vez de esconderse",
 
 /* El seguimiento de otro proyecto es texto que capataz no controla. Si alguien
  * escribe `<img onerror=…>` en una celda, tiene que salir escapado. */
-const conHtml = JSON.parse(JSON.stringify(datos));
-conHtml.proyectos = [JSON.parse(JSON.stringify(legibles[0]))];
+const conHtml = copia(datos);
+conHtml.proyectos = [copia(legibles[0])];
 conHtml.proyectos[0].pendientes_de_pablo = [{
   id: "Z1", titulo: '<img src=x onerror="alert(1)">& "comillas"',
   dias: 3, quien: "", estado: "pendiente"
@@ -260,6 +293,85 @@ af("un título con marcado ajeno sale escapado",
    escapado.indexOf("<img src=x") < 0 && escapado.indexOf("&lt;img src=x") >= 0);
 af("y los & y las comillas también",
    escapado.indexOf("&amp;") >= 0 && escapado.indexOf("&quot;") >= 0);
+
+console.log("§ 6 · Prendido o caído — los tres colores de un agente");
+/* Es el punto entero de la tanda: «al observar variaciones en vivo va a poder
+ * ver los agentes que se prenden y apagan». Los tres estados tienen que
+ * distinguirse **en la pantalla** y no sólo en el JSON, y el del medio —el que
+ * capataz no sabe— no puede caer en ninguno de los otros dos. */
+const conAgentes = copia(datos);
+conAgentes.proyectos = [copia(legibles[0])];
+conAgentes.proyectos[0].ramas = [
+  ramaFalsa({ nombre: "main", es_principal: true, estado: "principal",
+              commits_adelante: 0 }),
+  ramaFalsa({ nombre: "t1-viva", estado: "trabajando", hace_seg: 600,
+              autor: "coder-1" }),
+  ramaFalsa({ nombre: "t2-dudosa", estado: "dudoso", hace_seg: 7200,
+              autor: "coder-2" }),
+  ramaFalsa({ nombre: "t3-caida", estado: "caído", hace_seg: 108000,
+              autor: "coder-3" }),
+  ramaFalsa({ nombre: "t4-lista", estado: "integrada", commits_adelante: 0,
+              autor: "escriba-1" })
+];
+conAgentes.proyectos[0].cuadrilla = [
+  { quien: "coder-3", rol: "coder", que: "t3-caida", punto: "T3",
+    asunto: "algo", estado: "caído", desde: 1, hace_seg: 108000 },
+  { quien: "coder-2", rol: "coder", que: "t2-dudosa", punto: "T2",
+    asunto: "algo", estado: "dudoso", desde: 1, hace_seg: 7200 },
+  { quien: "coder-1", rol: "coder", que: "t1-viva", punto: "T1",
+    asunto: "algo", estado: "trabajando", desde: 1, hace_seg: 600 },
+  { quien: "reviewer-1", rol: "reviewer", que: "T7", punto: "T7",
+    asunto: "un punto tomado", estado: "sin rama", desde: null, hace_seg: null }
+];
+const htmlAg = pintarCon(conAgentes).cuerpo.innerHTML;
+/* La fila de esa clave, **cortada en su propio `</li>`**. Con una ventana de
+ * N caracteres se colaba el chip del agente siguiente: la aserción de que
+ * «dudoso» no lleva la clase de «trabajando» se ponía roja porque la clase
+ * estaba en la fila de al lado. Primera hipótesis, el arnés — y era. */
+function filaDe(html, clave) {
+  const i = html.indexOf(clave);
+  if (i < 0) return "";
+  const fin = html.indexOf("</li>", i);
+  return html.slice(i, fin < 0 ? i + 420 : fin);
+}
+af("un agente que se movió recién se dibuja como «trabajando», en verde",
+   /class="chip r-trabajando"/.test(filaDe(htmlAg, "t1-viva")) &&
+   filaDe(htmlAg, "t1-viva").indexOf("trabajando") >= 0,
+   filaDe(htmlAg, "t1-viva"));
+af("uno que no se mueve hace 30 horas se dibuja «caído», en rojo",
+   /class="chip r-caido"/.test(filaDe(htmlAg, "t3-caida")),
+   filaDe(htmlAg, "t3-caida"));
+af("y el del medio se dibuja «dudoso», que NO es ni el verde ni el rojo",
+   /class="chip r-dudoso"/.test(filaDe(htmlAg, "t2-dudosa")) &&
+   !/class="chip r-trabajando"/.test(filaDe(htmlAg, "t2-dudosa")) &&
+   !/class="chip r-caido"/.test(filaDe(htmlAg, "t2-dudosa")),
+   filaDe(htmlAg, "t2-dudosa"));
+af("una rama integrada no se dibuja como un agente caído",
+   /class="chip r-integrada"/.test(filaDe(htmlAg, "t4-lista")),
+   filaDe(htmlAg, "t4-lista"));
+af("un punto en curso sin rama se ve como «sin rama», no como caído",
+   htmlAg.indexOf("sin rama") >= 0 &&
+   /class="chip r-sinrama"/.test(filaDe(htmlAg, "reviewer-1")),
+   filaDe(htmlAg, "reviewer-1"));
+af("la cuadrilla dice hace cuánto se movió cada uno, en la unidad que se lee",
+   htmlAg.indexOf("hace 10 min") >= 0 && htmlAg.indexOf("hace 30 h") >= 0,
+   htmlAg.slice(htmlAg.indexOf("La cuadrilla"), htmlAg.indexOf("La cuadrilla") + 600));
+af("y el reparto por rol sigue con los ceros",
+   /class="chip [^"]*cero"/.test(htmlAg));
+
+/* Sin ninguna rama viva, se dice que no hay nadie **y sobre qué se miró**: no
+ * es lo mismo que no haber podido mirar, y las dos frases tienen que ser
+ * distintas. */
+conAgentes.proyectos[0].cuadrilla = [];
+conAgentes.proyectos[0].ramas = [
+  ramaFalsa({ nombre: "main", es_principal: true, estado: "principal",
+              commits_adelante: 0 })
+];
+const htmlVacio = pintarCon(conAgentes).cuerpo.innerHTML;
+af("sin nadie trabajando se dice, y se dice sobre qué se miró",
+   htmlVacio.indexOf("nadie trabajando") >= 0 &&
+   htmlVacio.indexOf("sin integrar") >= 0, htmlVacio.slice(0, 200));
+af("y eso NO es «no sé»", htmlVacio.indexOf("quién trabaja · no sé") < 0);
 
 console.log("\nASERCIONES: " + ASER + "\nROJAS: " + ROJAS);
 process.exit(ROJAS ? 1 : 0);
