@@ -1,0 +1,77 @@
+# CI — corre exactamente lo mismo que corre una persona
+#
+# El workflow no tiene pasos propios de verificación: llama a `./verificar.sh`,
+# que es el mismo comando que se corre antes de cerrar una tanda. Si acá hiciera
+# falta un paso extra para pasar, ese paso está mal y va adentro del script.
+#
+# **Lo que este proyecto tiene y ERP 360 no:** en el CI los proyectos vigilados
+# NO existen —el checkout trae capataz solo—, así que la suite tiene que pasar
+# igual con los tres seguimientos ausentes. No es una concesión: es el caso que
+# capataz va a ver el día que alguien mueva una carpeta, y la regla 3 dice que
+# se tiene que ver faltando en vez de dibujar una tarjeta vacía.
+#
+# `fetch-depth: 0` porque `pruebas/verificar-credenciales.py` mira la historia
+# entera buscando algo con forma de token: con un checkout de un solo commit
+# ese chequeo pasaría sin haber mirado nada.
+#
+# Una rama con esto en rojo no se mergea. Y el resultado **hay que abrirlo en la
+# web**: `api.github.com` está fuera de la lista blanca del contenedor de un
+# agente, así que desde ahí no se puede leer si esto corrió ni con qué resultado
+# (`ops/00-mapa.md`). En ERP 360 eso costó un día de rojas que nadie vio.
+
+name: verificar
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Sin `pip install`: capataz usa sólo la biblioteca estándar, y node ya
+      # viene en el runner. Un proyecto que necesita instalar algo para
+      # verificarse es un proyecto donde el agente depende de que vos estés.
+      - name: Con qué se corre
+        run: |
+          python3 --version
+          node --version
+          git --version
+
+      - name: Verificar
+        run: ./verificar.sh
+
+      # Que la app levante es parte de «funciona». **«Sin errores» no es lo
+      # mismo que «dibujó algo»**: se afirma que `/api/estado` contesta JSON con
+      # los proyectos adentro y que `/` trae la pantalla con su meta viewport
+      # —el requisito que motiva el proyecto es que se lea desde un teléfono—.
+      - name: Capataz levanta y contesta
+        run: |
+          python3 capataz.py &
+          for _ in $(seq 1 20); do
+            curl -fsS -o /tmp/estado.json http://127.0.0.1:5402/api/estado && break
+            sleep 0.5
+          done
+          python3 -c "import json,sys; d=json.load(open('/tmp/estado.json')); \
+            assert d['proyectos'], 'la API no devolvió ningún proyecto'; \
+            print('proyectos:', [p['nombre'] for p in d['proyectos']])"
+          curl -fsS http://127.0.0.1:5402/ -o /tmp/pantalla.html
+          grep -q 'width=device-width' /tmp/pantalla.html
+          grep -q 'id="cuerpo"' /tmp/pantalla.html
+          # Y que una ruta que no existe sea 404 y no la pantalla.
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5402/no-existe)" = "404"
+          kill %1
+
+      # El total, dejado donde se pueda comparar contra el de `main` sin correr
+      # la suite de nadie. Es lo mismo que hace `verificar.sh` en disco.
+      - name: El total medido
+        run: cat pruebas/total-aserciones.txt

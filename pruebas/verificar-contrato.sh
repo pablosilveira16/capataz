@@ -96,5 +96,54 @@ else
   fi
 fi
 
+# --- 4 · CLAUDE.md: el tope de 72 líneas -----------------------------------
+#
+# Lo decía la cabecera de `CLAUDE.md` desde el día cero —«`pruebas/verificar-
+# contrato.sh` verifica el tope y que exista lo que se nombra acá»— y **no era
+# cierto**: este arnés miraba el seguimiento y nada más. Un archivo que se
+# atribuye una compuerta que no existe es peor que uno sin compuerta, porque el
+# que lo lee deja de mirar. Encontrado el 2026-08-06 al reconciliar.
+CL="CLAUDE.md"
+if [ ! -f "$CL" ]; then
+  roja "no existe $CL"
+else
+  ok
+  lineas="$(wc -l < "$CL" | tr -d ' ')"
+  if [ "$lineas" -le 72 ]; then ok; else
+    roja "$CL tiene $lineas líneas y el tope duro es 72 — si algo entra, algo sale"
+  fi
+
+  # --- 5 · y que exista todo lo que nombra ---------------------------------
+  #
+  # Se sacan los nombres de archivo entre backticks. Lo que se saltea, y por
+  # qué —la lista es corta a propósito: cada excepción es un lugar donde una
+  # ruta rota se puede esconder—:
+  #
+  #   · `ERP360-Template/…`  vive en el repo de al lado, no en éste;
+  #   · `panel/…`, `agente.py`, `ops/60-roles.md`  son de los proyectos
+  #     VIGILADOS. CLAUDE.md los nombra para decir que capataz los lee y no los
+  #     escribe, y capataz no tiene ninguno de los tres.
+  #
+  # Cualquier otra ruta nombrada tiene que existir acá. Con esto, `BITACORA.md`
+  # —que CLAUDE.md nombraba desde el día cero y no existía— se ve en rojo.
+  nombrados="$(grep -oE '`[A-Za-z0-9_./-]+\.(md|sh|py|html|json|txt|js|yml)`' "$CL" \
+               | tr -d '`' | sort -u)"
+  mirados=0
+  for ruta in $nombrados; do
+    case "$ruta" in
+      ERP360-Template/*|panel/*|agente.py|panel.py|ops/60-roles.md) continue ;;
+    esac
+    mirados=$((mirados+1))
+    if [ -e "$ruta" ]; then ok; else
+      roja "$CL nombra \`$ruta\` y no existe"
+    fi
+  done
+  # Cero rutas miradas es falla: querría decir que el `grep` de arriba dejó de
+  # encontrar lo que mira y este bloque estaría salteando en silencio.
+  if [ "$mirados" -ge 8 ]; then ok; else
+    roja "sólo encontré $mirados rutas en $CL — esperaba al menos 8; el grep dejó de ver"
+  fi
+fi
+
 printf '\nASERCIONES: %d\nROJAS: %d\n' "$ASER" "$ROJAS"
 [ "$ROJAS" = "0" ] || exit 1
