@@ -46,7 +46,9 @@ que adivinar (ver `lector.py`, y el punto T4).
 **Cómo se cierra un punto.** Se marca `hecho` con la prueba pegada al lado —el
 arnés que lo vigila **y** su número de aserciones—, se saca de *Abierto ahora* y
 se le escribe el capítulo en la bitácora. **`hecho` sin prueba al lado es una
-opinión.**
+opinión.** Y el número se copia **después** de correr el arnés, nunca de memoria:
+el 2026-08-06 seis filas de este archivo tenían números viejos y una citaba un
+arnés que no existía (`BITACORA.md`, Tanda 1).
 
 **Y acá hay git.** Todo punto cerrado tiene su commit. Un punto que se cerró en
 la máquina de alguien y no está en `main` está abierto.
@@ -62,24 +64,27 @@ más abajo, en la tanda donde nació.
 
 | # | Qué falta | Desde | Estado |
 |---|---|---|---|
-| D1 | **Mirar la pantalla en un teléfono de verdad.** Está verificado que las condiciones para 360 px se cumplen —`verificar-angosto.py` § 1 calcula 340 + 2×10 = 360— pero *mirar* no se pudo: en el contenedor de un agente no hay Chromium ni Playwright. `./run.sh --instantanea` deja un `_instantanea.html` que se abre con `file://` desde la Mac. Es de Pablo porque el navegador está de ese lado | 2026-08-06 | pendiente (Pablo) |
-| D2 | **El repositorio `github.com/pablosilveira16/capataz`.** La plomería está hecha y verificada (T1); falta el repo vacío y el token *fine-grained* con `Contents: Read and write` + `Metadata: Read-only` + **`Workflows: Read and write`** —el que a ERP 360 le faltó y rechazó el push entero— en `../.credenciales/github-capataz.token`, `chmod 600`. Los pasos exactos están en `ops/70-credenciales.md` | 2026-08-06 | pendiente (Pablo) |
 | D3 | **Hasta dónde llega capataz.** Hoy es un visor y `CLAUDE.md` § 1 dice que no decide ni lanza nada. La orquestación —convocar un agente, asignarle un punto— es el paso siguiente y **cambia la regla que manda**: en el momento en que capataz marque un punto `en curso`, deja de ser sólo lector. Se decide cuando la lectura esté rodada, no antes | 2026-08-06 | pendiente (Pablo) |
+| D4 | **Mirar la primera corrida del CI, en la web.** El workflow está escrito y ensayado en un clon sin vecinos (T6), pero **desde el contenedor de un agente el resultado no se puede leer**: `api.github.com` está fuera de la lista blanca y `gh` no está instalado. Es de Pablo porque el navegador está de ese lado. Y hay motivo concreto: a ERP 360 los `.sh` le viajaron sin bit de ejecución y su CI estuvo en rojo un día entero sin que nadie lo viera. La primera corrida que hay que abrir es la de la rama `t7-reconciliar-y-cerrar` | 2026-08-06 | pendiente (Pablo) |
+| D5 | **`ERP360-Template/` ya no está en la carpeta.** Estaba a las 01:26 del 2026-08-06 —capataz le leyó 22 pendientes y 44 hechos, contados a mano y coincidentes— y a las 02:24 no estaba. **No fue capataz**: sólo lee, y eso está verificado byte a byte en `verificar-lector.py` § 1. Mientras no vuelva, la tarjeta lo muestra en rojo con la ruta que buscó —que es lo correcto— y **T2 y T7 no se pueden tocar**, porque los dos son trabajo en ese repositorio | 2026-08-06 | pendiente (Pablo) |
 
 ### Se puede hacer sin preguntar
 
 | # | Qué falta | Desde | Estado |
 |---|---|---|---|
-| T2 | **Ni ERP 360 ni Finca 360 dejan el total de aserciones medido**, así que capataz muestra «no sé» en todas sus ramas — que es lo correcto y también es inútil. El arreglo son tres líneas en el `verificar.sh` de cada uno, las mismas que ya tiene el de capataz: escribir el total en `pruebas/total-aserciones.txt` sólo cuando está todo verde. Es trabajo **en el repo de ellos**, no acá | 2026-08-06 | pendiente |
+| T2 | **Ni ERP 360 ni Finca 360 dejan el total de aserciones medido**, así que capataz muestra «no sé» en todas sus ramas — que es lo correcto y también es inútil. El arreglo son tres líneas en el `verificar.sh` de cada uno, las mismas que ya tiene el de capataz: escribir el total en `pruebas/total-aserciones.txt` sólo cuando está todo verde. Es trabajo **en el repo de ellos**, no acá. Al 2026-08-06 Finca 360 pasó a ser repositorio git (`cf6add0`), así que ahora también tiene dónde dejarlo | 2026-08-06 | pendiente |
 | T3 | **Un `en curso` sin fecha no dice hace cuánto.** El lector saca la antigüedad de la columna `Desde`, que es la fecha en que nació el punto y no la de la toma. Un punto tomado hoy que nació hace un mes se ve como un `en curso` de treinta días. La fecha de la toma está en dos lugares que capataz ya alcanza: la marca de `panel/agentes.jsonl` y el commit del `--tomar`. Falta cruzarlas | 2026-08-06 | pendiente |
 | T4 | **Un proyecto cuyas tablas de puntos no tengan columna `#` se lee como vacío**, en silencio. Hoy se cuenta en `tablas_ignoradas` y no se muestra: mostrarlo siempre sería el aviso que sale siempre. Falta la forma que avise **sólo cuando importa** —cero puntos leídos y una tabla ignorada— y un arnés que lo vea rojo | 2026-08-06 | pendiente |
-| T5 | **El CI se puede leer desde la Mac y no desde el contenedor.** `interpretar_ci()` ya existe y está verificada con las cinco respuestas; lo que falta es quién le pasa la respuesta. Va detrás de una variable de entorno, y **sin ella el resultado se queda en «no sé»**, nunca en verde | 2026-08-06 | pendiente |
-| T6 | **Capataz no tiene CI.** ERP 360 corre `./verificar.sh` en un workflow; acá no hay ninguno. Es barato y es la única forma de que el total se mire solo | 2026-08-06 | pendiente |
+| T5 | **El CI se puede leer desde la Mac y no desde el contenedor.** `interpretar_ci()` ya existe y está verificada con las cinco respuestas **y con lo que dibuja la pantalla** (`verificar-pantalla.js` §§ 2 y 3); lo que falta es quién le pasa la respuesta. Va detrás de una variable de entorno, y **sin ella el resultado se queda en «no sé»**, nunca en verde | 2026-08-06 | pendiente |
+| T6 | **El CI está escrito y nadie lo vio correr.** `.github/workflows/verificar.yml` existe y corre `./verificar.sh` y nada más; se ensayó clonando el repo a `/tmp` —donde los proyectos vecinos no existen, igual que en el runner— y la suite dio **268 aserciones en verde**, el mismo número que en la carpeta de trabajo. Eso es la mitad: **falta ver una corrida de verdad**, y desde acá no se puede → D4. Queda `pendiente` a propósito: un `hecho` que nadie vio correr es exactamente la clase de línea que esta tanda tuvo que reconciliar | 2026-08-06 | pendiente |
+| T8 | **El total de aserciones se mueve con el largo de este archivo.** `verificar-contrato.sh` cuenta **una aserción por fila con columna `Estado`** —honesto, cada fila se verifica de verdad— pero eso hace que agregar un punto suba el total sin que se haya verificado nada nuevo, y entonces «el total bajó» deja de ser una señal limpia. La salida es contar las filas en **una** aserción («ninguna de las N celdas usa una palabra fuera de las cinco») más otra de piso («hay al menos N filas»), que conserva la propiedad de que cero es falla. Es un cambio de diseño de un arnés ajeno, así que va como punto y no de paso | 2026-08-06 | pendiente |
+| T9 | **Capataz no tiene `ops/60-roles.md`**, así que la tarjeta de su **propio** proyecto dice «qué roles existen · no sé». Es correcto —no se inventa la lista de otro— y es el único de los tres proyectos que puede arreglarlo sin tocar el repositorio de nadie. Va con la lista de roles que este proyecto use de verdad, no con la de seis copiada de ERP 360 | 2026-08-06 | pendiente |
 
 ### Decidido, esperando el momento
 
 | # | Qué | Desde | Hasta cuándo | Estado |
 |---|---|---|---|---|
+| T7 | **El `panel/` de ERP 360: reemplazar la mitad que mira, nunca absorber la que escribe.** La decisión está tomada y escrita en `BITACORA.md`, Tanda 1. `panel/agente.py` + `panel/agentes.jsonl` **no se absorben nunca** —escriben, y capataz sólo lee—; `panel/panel.py` + `panel/panel.html` (5401) los reemplaza capataz, que mira varios proyectos, entra en un teléfono y dice «no sé» donde el panel no dice nada. **No se ejecuta todavía** porque hoy ese panel es lo único que le da a un agente de ERP 360 una pantalla sin depender de que capataz esté levantado. Y **no lo ejecuta capataz**: es un cambio en el repositorio de ellos | 2026-08-06 | que se decida D3, y que vuelva `ERP360-Template/` (D5) | diferido |
 | X1 | **Que capataz muestre el CI de verdad en el tablero.** El mecanismo está (T5); lo que falta es dónde corre capataz | 2026-08-06 | que se decida D3 | diferido |
 | X2 | **Despliegue.** Hoy corre en `127.0.0.1:5402` con el servidor de la biblioteca estándar, que no va a producción. Y para leerlo desde el teléfono hace falta que llegue desde afuera de la Mac, que es una decisión de red antes que de código | 2026-08-06 | que se decida D3 | diferido |
 
@@ -99,13 +104,34 @@ El proyecto arranca siguiendo al pie el orden de
 cuatro primeros puntos son el andamio y **ninguno toca la aplicación**; el
 código empieza en el A5.
 
+Los números de aserciones de esta tabla estaban viejos y se corrigieron el
+2026-08-06 corriendo cada arnés; el detalle está en `BITACORA.md`, Tanda 1.
+
 | # | Punto | Estado |
 |---|---|---|
-| A1 | Este seguimiento, con el contrato y los cinco estados, **vacío** | **hecho** · `verificar-contrato.sh` 10 aserciones — commit `eb6a341` |
-| A2 | `verificar.sh` y un arnés que verifique lo más tonto que se me ocurra | **hecho** · `verificar-contrato.sh` 10 aserciones — visto en rojo con un estado inventado |
-| A3 | `git init` y el primer commit, **antes de la primera línea de la app** | **hecho** · `verificar-contrato.sh` 10 aserciones — commit `eb6a341`, y `core.filemode true` puesto desde el día cero |
-| A4 | `CLAUDE.md` con tres reglas — no diez | **hecho** · `verificar-angosto.py` 25 aserciones — 72 de 72 líneas, commit `f968fa6` |
+| A1 | Este seguimiento, con el contrato y los cinco estados, **vacío** | **hecho** · `verificar-contrato.sh` 38 aserciones — commit `eb6a341` |
+| A2 | `verificar.sh` y un arnés que verifique lo más tonto que se me ocurra | **hecho** · `verificar-contrato.sh` 38 aserciones — visto en rojo con un estado inventado |
+| A3 | `git init` y el primer commit, **antes de la primera línea de la app** | **hecho** · commit `eb6a341`, y `core.filemode true` puesto desde el día cero |
+| A4 | `CLAUDE.md` con tres reglas — no diez | **hecho** · `verificar-contrato.sh` §§ 4 y 5, 38 aserciones — 72 de 72 líneas y todo lo que nombra existe, commit `f968fa6` |
 | A5 | `lector.py`: los dos formatos de seguimiento, los roles, la cuadrilla, las ramas y el CI | **hecho** · `verificar-lector.py` 81 aserciones — proyectos de verdad armados en `/tmp` |
-| A6 | `capataz.py` y `capataz.html` en el 5402, sin dependencias | **hecho** · `verificar-angosto.py` 25 aserciones — se ejecuta `render_estatico()` y se mira el HTML producido |
-| A7 | `ops/`, con la marcha atrás **antes** que el despliegue | **hecho** · `verificar-angosto.py` 25 aserciones — el puerto del mapa y el de `capataz.py` son el mismo |
-| T1 | La plomería para empujar a GitHub, traída de ERP 360 y adaptada | **hecho** · `verificar-credenciales.py` 26 aserciones — el helper se ejecuta de verdad |
+| A6 | `capataz.py` y `capataz.html` en el 5402, sin dependencias | **hecho** · `verificar-angosto.py` 28 aserciones — se ejecuta `render_estatico()` y se mira el HTML producido |
+| A7 | `ops/`, con la marcha atrás **antes** que el despliegue | **hecho** · `verificar-angosto.py` 28 aserciones — el puerto del mapa y el de `capataz.py` son el mismo |
+| T1 | La plomería para empujar a GitHub, traída de ERP 360 y adaptada | **hecho** en la Tanda 1 · `verificar-credenciales.py` 75 aserciones — commit `1f893c3`. **Figuró `hecho` sin estarlo**: citaba un arnés que no existía |
+
+---
+
+## Tanda 1 — reconciliar y cerrar, 2026-08-06
+
+La tanda empieza ordenando lo que este archivo decía y no era: a `coder-1` lo
+interrumpieron antes de cerrar por escrito. El capítulo completo —qué mentía, y
+qué se hizo para que no vuelva a pasar— está en `BITACORA.md`, Tanda 1.
+
+| # | Punto | Estado |
+|---|---|---|
+| R1 | **Reconciliar este archivo con lo que existe de verdad**, punto por punto y corriendo cada arnés — y escribir `BITACORA.md`, que `CLAUDE.md` nombraba desde el día cero y no existía | **hecho** · `verificar-contrato.sh` 38 aserciones — §§ 4 y 5 nuevas: miden el tope de 72 líneas y que exista cada archivo que `CLAUDE.md` nombra. **Vistas en rojo** con `BITACORA.md` ausente y con `CLAUDE.md` en 73 líneas |
+| T1 | **La plomería para empujar**: `ops/credencial-github.sh` commiteado, `ops/empujar.sh` y `ops/70-credenciales.md` traídos de ERP 360 y adaptados | **hecho** · `verificar-credenciales.py` 75 aserciones — commit `1f893c3`. Ejecuta el helper y `empujar.sh` de verdad, y clona el repositorio para comprobar que una copia nueva queda configurada. **Visto en rojo** con la ruta del helper escrita en vez de calculada |
+| R2 | **La pantalla, ejecutándola**: la regla 3 estaba verificada en el lector y **no en la pantalla**, que es donde alguien la lee | **hecho** · `verificar-pantalla.js` 36 aserciones — corre el JavaScript de `capataz.html` en un `vm` con los datos de verdad. **Visto en rojo**: con `clase = e === "rojo" ? "rojo" : "verde"` puesto, se caen siete aserciones y el chip dice «CI · no sé» pintado de verde |
+| R3 | **Que todo `.sh` versionado viaje ejecutable**, mirando el índice y no el disco — la factura que ERP 360 pagó con un día de CI en rojo que nadie vio | **hecho** · `verificar-credenciales.py` 75 aserciones, y la misma compuerta adentro de `ops/empujar.sh`. **Visto en rojo** con `git update-index --chmod=-x run.sh` |
+| R4 | **Que el total de aserciones sea comparable.** Medido: 274 en la carpeta de trabajo y 260 en un clon sin vecinos, sin que hubiera cambiado nada — el arnés de la pantalla sumaba una aserción por proyecto | **hecho** · `verificar-pantalla.js` 36 aserciones — agrupado da el mismo número en los dos lados —268 el 2026-08-06— y el detalle sigue diciendo cuál falló |
+| D1 | **Mirar la pantalla en un teléfono** — el requisito que motiva el proyecto | **hecho** · `verificar-angosto.py` 28 + `verificar-pantalla.js` 36 aserciones, **y mirada**: Chrome con un viewport de 360 px de verdad. `scrollWidth == clientWidth == 360`, sin scroll horizontal, la hoja en 340 px, **cero elementos pasando de 360**, las tres tarjetas legibles. Lo que queda —un teléfono físico— ya no bloquea nada |
+| D2 | **El repositorio `github.com/pablosilveira16/capataz` y el token** | **hecho** · `verificar-credenciales.py` 75 aserciones — `main` publicado en `4d08197`, y el permiso **`Workflows: Read and write` confirmado**: el push de esta rama llevó `.github/workflows/verificar.yml` y entró. Es justo el permiso que a ERP 360 le faltó y le rechazó el push entero |

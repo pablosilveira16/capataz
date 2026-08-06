@@ -109,8 +109,9 @@ af("la cabecera dice cuántos proyectos y cuándo",
  * proyecto el total dependería de cuántas carpetas hay al lado — se midió: 274
  * en la carpeta de trabajo y 260 en un clon sin vecinos, como el del CI, sin
  * que nada hubiera cambiado. Un número que se mueve solo deja de servir para
- * comparar una rama con main. Agrupado da 258 en los dos lados, y **el detalle
- * dice cuáles fallaron**, que es lo que uno necesita para arreglarlo. */
+ * comparar una rama con main. Agrupado da el mismo número de los dos lados, y
+ * **el detalle dice cuáles fallaron**, que es lo que uno necesita para
+ * arreglarlo. */
 function todos(descripcion, lista, prueba) {
   const malos = lista.filter(function (p) { return !prueba(p); })
                      .map(function (p) { return p.nombre; });

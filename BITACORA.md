@@ -315,14 +315,66 @@ sin bit de ejecución y `run: ./verificar.sh` falló con «Permission denied» e
 índice se verifica antes de empujar; el resultado de la primera corrida, igual,
 lo tiene que abrir alguien en la web.
 
+## La pantalla, mirada — y no sólo calculada
+
+D1 decía que las condiciones para 360 px estaban verificadas pero que *mirar* no
+se había podido: en el contenedor de un agente no hay Chromium ni Playwright. Se
+resolvió por el otro lado, con el navegador de la Mac:
+
+`./run.sh --instantanea` deja la pantalla con los datos adentro; se la cargó en
+un **iframe de 360 px de ancho**, que es un viewport de verdad con layout de
+verdad — la ventana de Chrome en macOS no baja de 500 px, así que redimensionarla
+no alcanzaba. Lo medido, no estimado:
+
+| | |
+|---|---|
+| viewport | 360 px |
+| `scrollWidth` / `clientWidth` | 360 / 360 → **sin scroll horizontal** |
+| ancho de `.hoja` | 340 px (+ 2 × 10 de padding = 360) |
+| elementos que pasan de 360 px | **cero** |
+| alto total | 3206 px · 3 tarjetas · 20 chips |
+
+Y **mirada**: se lee. Las tarjetas se apilan, los títulos largos de los puntos
+ajenos envuelven, los chips pasan a una segunda fila en vez de estirar la
+página, y los tres «no sé» —CI, aserciones, roles— se ven distintos del verde:
+borde punteado y gris. El bloque «El mismo punto, dos estados» de Finca 360
+muestra en pantalla exactamente las dos contradicciones que el conteo a mano
+había encontrado, E9 y X4.
+
+Lo que queda —un teléfono físico, con su tipografía y su notch— ya no bloquea
+nada, así que D1 se cierra.
+
+## Dos cosas cambiaron abajo mientras esta tanda corría
+
+No las hizo capataz —sólo lee, y eso está verificado byte a byte— y no las hizo
+esta tanda. Se anotan porque el próximo que llegue va a ver otra cosa que la que
+dice el capítulo de arriba:
+
+- **`ERP360-Template/` desapareció de la carpeta.** A las 01:26 estaba y capataz
+  le leía 22 pendientes y 44 hechos —contados a mano, coincidentes—; a las 02:24
+  ya no estaba. Es el punto **D5**, y es de Pablo porque nadie más sabe si se
+  movió o se borró. Dos cosas buenas salieron de verlo: la pantalla lo muestra
+  **en rojo, con la ruta que buscó**, en vez de dibujar una tarjeta vacía que se
+  leería como «no falta nada»; y la suite siguió en verde con el proyecto
+  ausente, que es exactamente lo que el CI necesita.
+- **Finca 360 pasó a ser un repositorio git** (`cf6add0`, «Finca 360 al día del
+  2026-08-05»). Hasta esta tanda no lo era, y capataz decía «ramas · no sé», que
+  era correcto. Ahora muestra su `main` y dice «aserciones · no sé», que también
+  lo es: le falta dejar el total medido, y eso es T2.
+
 ## Qué quedó abierto y no estaba escrito
 
+- **D4** — la primera corrida del CI hay que abrirla en la web. Desde el
+  contenedor no se puede leer.
+- **D5** — `ERP360-Template/` no está (arriba). Bloquea T2 y T7.
 - **T7** — el `panel/` de ERP 360 (arriba). Es trabajo **en el repo de ellos**.
-- **T8** — `pruebas/total-aserciones.txt` de capataz se reescribe en cada corrida
-  verde, y el total se mueve cuando cambia `SEGUIMIENTO.md`: `verificar-contrato.sh`
-  cuenta **una aserción por fila con columna `Estado`**. Es honesto —cada fila se
-  verifica de verdad— pero hace que el total dependa del largo del seguimiento, y
-  entonces «el total bajó» deja de ser una señal limpia.
+- **T8** — el total se mueve con el largo del `SEGUIMIENTO.md`:
+  `verificar-contrato.sh` cuenta **una aserción por fila con columna `Estado`**.
+  Es honesto —cada fila se verifica de verdad— pero hace que agregar un punto
+  suba el total sin haber verificado nada nuevo, y entonces «el total bajó» deja
+  de ser una señal limpia. Se vio en vivo esta misma tanda: 258 antes de
+  reconciliar el seguimiento, 268 después, sin una línea de código de por medio.
+  Es un cambio de diseño de un arnés ajeno, así que va como punto y no de paso.
 - **T9** — capataz no tiene `ops/60-roles.md`, así que la tarjeta de **su propio**
   proyecto dice «qué roles existen · no sé». Es correcto y es feo: capataz es el
   único de los tres que puede arreglarlo sin tocar el repo de nadie.
