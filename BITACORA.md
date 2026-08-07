@@ -853,3 +853,36 @@ T15— y las dos se cayeron por lo mismo: **nadie las volvió a medir.**
 
 **495 aserciones en verde**, contra 431 al empezar. Las 64 nuevas: 50 del arnés
 de `taller.py` y 14 de la pantalla.
+
+## Finca 360, y la aserción que se volvió vacua al arreglar el dato
+
+T12 quedó cerrado: `pablosilveira16/finca360`, privado, 13 ramas. Lo que costó
+una medición fue la premisa. «Ya está cargado con todo» era razonable —el repo
+existía y `git ls-remote` autenticaba— y era falso: **devolvía cero refs**, y el
+clon local no tenía ningún remoto ni upstream en ninguna rama. Crear el
+repositorio en github.com no sube nada. Es la tercera premisa de este proyecto
+que se cae al medirla, y las tres se caen igual: alguien la afirmó una vez y
+nadie volvió a mirar.
+
+Lo que dejó de regalo es más interesante que el push. Esta aserción vivía en
+`verificar-lector.py` y estaba bien escrita:
+
+```python
+sin = [p for p in reales if not p["repo"]]
+af("un proyecto sin repo declara por qué", all(p["motivo_sin_repo"] for p in sin))
+```
+
+Al publicar Finca 360, `sin` quedó **vacía**. `all([])` es `True`: la aserción
+pasa siempre, sigue sumando al total y no verifica nada. **No se volvió vacua
+por escribir mal el arnés, sino por arreglar el dato**, que es la forma más
+difícil de verla — nadie sospecha de un arnés que sigue verde después de un
+cambio que salió bien. La reescritura habla de los tres proyectos y no de un
+subconjunto que puede vaciarse, y lleva `reales and` adelante para no sobrevivir
+a un `proyectos.json` vacío. Se la vio roja antes de contarla.
+
+Quedaron dos puntos que la lectura destapó: Finca 360 no tiene token propio
+(T23) y **la carpeta de credenciales que `nube.py` busca por defecto no es la
+que existe en la Mac** (T24). Los dos están tapados hoy por el llavero de macOS,
+que contesta antes que el helper — o sea que la próxima máquina sin llavero se
+va a encontrar con los tres proyectos fallando juntos por una ruta que nadie
+miró.

@@ -53,8 +53,8 @@
     },
     {
       "nombre": "Finca 360",
-      "repo": null,
-      "motivo_sin_repo": "Finca 360 es un repositorio git local (cf6add0) y NO está publicado en GitHub, así que desde la nube no hay nada que leer. Queda declarado y no se lo saca de la lista: borrarlo dejaría el hecho de que existe y está sin publicar escrito en ningún lado, y capataz diría que vigila dos proyectos cuando son tres. El día que se publique, esta línea pasa a ser un `repo` y nada más. → punto T12",
+      "repo": "pablosilveira16/finca360",
+      "token": "github-finca360.token",
       "seguimiento": "Finca360 — Seguimiento.md",
       "roles": "ops/60-roles.md",
       "total_aserciones": "pruebas/total-aserciones.txt",

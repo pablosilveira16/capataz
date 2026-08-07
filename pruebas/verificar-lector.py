@@ -591,9 +591,16 @@ af("el proyectos.json versionado tiene al menos dos proyectos con repo",
 malos = [p["nombre"] for p in reales
          if p["repo"] and ("/" not in p["repo"] or p["repo"].startswith("."))]
 af("y ninguno declara una ruta donde va un owner/repo", not malos, malos)
-sin = [p for p in reales if not p["repo"]]
-af("un proyecto sin repo declara por qué; si no, es un vacío que nadie explica",
-   all(p["motivo_sin_repo"] for p in sin), [p["nombre"] for p in sin])
+# Esta aserción decía «todos los que no tienen repo declaran por qué», y el
+# 2026-08-06 —al publicar Finca 360— esa lista quedó **vacía**: `all([])` es
+# `True`, así que pasaba siempre, seguía sumando al total y no verificaba nada.
+# Es el caso vacuo del § 2 de `CLAUDE.md`, aparecido no por escribir mal el
+# arnés sino por **arreglar el dato**, que es la forma más difícil de verla.
+# Ahora habla de los tres proyectos y no de un subconjunto que puede vaciarse; y
+# `reales and` es lo que impide que sobreviva a un `proyectos.json` vacío.
+mudos = [p["nombre"] for p in reales if not p["repo"] and not p["motivo_sin_repo"]]
+af("cada proyecto declara un repo o declara por qué no lo tiene (%d proyectos)"
+   % len(reales), reales and not mudos, mudos)
 
 print("\nASERCIONES: %d\nROJAS: %d" % (ASER, ROJAS))
 sys.exit(1 if ROJAS else 0)
