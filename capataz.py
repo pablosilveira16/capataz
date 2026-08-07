@@ -34,6 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import lector
 import nube
+import taller
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 PROYECTOS = os.environ.get("CAPATAZ_PROYECTOS") or os.path.join(AQUI, "proyectos.json")
@@ -98,6 +99,12 @@ def estado():
             return _cache["datos"]
         proyectos = lector.leer_proyectos(PROYECTOS)
         vistas = [_mirar(p, ahora) for p in proyectos]
+        # El taller es la otra fuente, y contesta otra pregunta: GitHub dice
+        # **qué quedó hecho** y esto dice **quién está prendido acá**. Va
+        # adentro del mismo candado porque sale de la misma foto del segundo,
+        # pero no cuesta red: son unos pocos archivos de cientos de bytes.
+        vista_taller = taller.leer(ahora=ahora)
+        vista_taller["sueltas"] = taller.empatar(vista_taller, proyectos)
         datos = {
             "ahora": ahora,
             "cuando": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -113,6 +120,12 @@ def estado():
             # mismos dos números en dos lugares sin ninguna regla sobre cuál
             # gana — el bug que este proyecto tiene escrito como regla 1.
             "umbrales": {"fresco": lector.FRESCO, "tibio": lector.TIBIO},
+            # El taller tiene **sus propios umbrales**, y son otro orden de
+            # magnitud: una rama se mira en horas y un subagente en minutos.
+            # Viajan igual que los otros —una vez y desde acá— para que la
+            # pantalla no los copie.
+            "taller": vista_taller,
+            "umbrales_taller": {"fresco": taller.FRESCO, "tibio": taller.TIBIO},
             "refresco_nube": nube.REFRESCO,
             "proyectos": vistas,
             "sin_proyectos": not proyectos,

@@ -63,6 +63,24 @@ h3 { font-size: 12px; margin: 12px 0 5px; text-transform: uppercase;
    tablero que miente en el caso que importa es peor que no tenerlo. */
 .nose { border-style: dashed; border-color: #55607a; background: transparent;
         color: #98a2b8; }
+/* El taller. `sin señal` usa la pinta de «no sé» a propósito: terminado y
+   colgado no se distinguen desde el disco, así que el chip no puede parecer
+   ninguno de los dos. `cerrado` sí es un hecho sabido —el proceso no está—,
+   así que es apagado y no punteado. */
+.r-sinsenal { border-style: dashed; border-color: #55607a; background: transparent;
+              color: #98a2b8; }
+.r-cerrado  { border-color: #3a3f52; color: #98a2b8; }
+.sesion { border: 1px solid #2f3648; border-radius: 9px; padding: 9px 10px;
+          margin: 8px 0; background: #1a1f2b; }
+.sesion .cab { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+.sesion .cab b { font-size: 15px; }
+.subagente { border-left: 2px solid #2f3648; margin: 7px 0 0 2px;
+             padding: 0 0 0 9px; }
+.subagente .que { font-size: 13px; }
+/* Suelta y no como descendiente de `.subagente`: la primera versión la escribió
+   anidada y el mensaje de una sesión sin subagentes salió en cuerpo grande,
+   tapando a las sesiones de abajo. Se vio mirando la pantalla, no el arnés. */
+.porque { font-size: 11px; color: #8b94a8; margin-top: 3px; }
 .rojo  { border-color: #7a2020; background: #2a1212; color: #ffc9c9; }
 .verde { border-color: #245c34; background: #12251a; color: #b6f0c6; }
 .ambar { border-color: #7a5a1a; background: #2a2212; color: #f0dca6; }
@@ -141,6 +159,9 @@ details p { font-size: 11px; color: #8b93a7; margin: 5px 0 0; }
   <h3><span class="pulso" id="pulso"></span>Agentes ahora</h3>
   <div class="tenue" id="frescura">…</div>
   <div id="agentes"></div>
+  <h3>El taller</h3>
+  <div class="tenue" id="alcance">…</div>
+  <div id="taller"></div>
   <h3>Los proyectos</h3>
   <div id="cuerpo"></div>
   <div class="pie muy-tenue">
@@ -424,6 +445,7 @@ var ULTIMO_OK = 0;
 var VISTOS = null;      /* sha por agente en la lectura anterior */
 var DESPIERTOS = {};    /* clave -> hasta cuándo mostrar que se despertó */
 var FIRMA = "";
+var FIRMA_TALLER = "";
 var LATE = false;
 var ESTATICA = false;
 var SIN_CONTACTO = 10;  /* segundos sin respuesta para dejar de creerle a la pantalla */
@@ -510,6 +532,25 @@ function tickRelojes() {
       f.className = "agente " + (CLASE_AGENTE[e] || "a-sinrama");
     }
   }
+  /* Y lo mismo para el taller. Hace falta acá y no en el repintado de cada dos
+     segundos: la firma del taller ignora el reloj a propósito —si no, un
+     subagente que escribe seguido repintaría la sección entera todo el
+     tiempo—, así que sin esto el contador se congelaría en «hace 3 s» para
+     siempre, que es la peor de las dos mentiras posibles. */
+  var chips = document.querySelectorAll("#taller .chips[data-quieto]");
+  for (var j = 0; j < chips.length; j++) {
+    var c = chips[j];
+    var b = c.getAttribute("data-quieto");
+    var s = b === "" ? null : haceVivo(parseFloat(b));
+    var r = c.querySelector(".reloj-taller");
+    if (r) r.textContent = hace(s);
+    var et = estadoTaller(s, c.getAttribute("data-estado"));
+    var ct = c.querySelector(".chip-taller");
+    if (ct && ct.textContent !== et) {
+      ct.textContent = et;
+      ct.className = "chip chip-taller " + (CLASE_TALLER[et] || "nose");
+    }
+  }
 }
 
 /* Hace cuánto se habló con GitHub, que no es hace cuánto repinta la pantalla ni
@@ -580,6 +621,93 @@ function marcarDespiertos(ag) {
   VISTOS = ahora;
 }
 
+/* ---------------------------------------------------------------------------
+   El taller: los agentes de ESTA máquina, en vivo.
+
+   Es la otra fuente. GitHub contesta «qué quedó hecho» y sobrevive al reinicio;
+   esto contesta «quién está prendido acá» y no ve más allá de la máquina. Por
+   eso el alcance se pinta pegado al título y no en una nota al pie: una sección
+   que muestra tres agentes locales como si fueran la flota es exactamente el
+   tablero que miente del que habla la regla 3.
+--------------------------------------------------------------------------- */
+var CLASE_TALLER = {
+  "trabajando": "r-trabajando", "dudoso": "r-dudoso",
+  "sin señal": "r-sinsenal", "cerrado": "r-cerrado", "no sé": "nose"
+};
+
+/* Igual que el de las ramas: los umbrales los MANDA EL SERVIDOR y son otros
+   —minutos, no horas—. Y los dos desenlaces que no dependen del reloj no se
+   recalculan: `cerrado` es un hecho medido (el proceso no está) y `no sé` es la
+   ausencia de transcripción. Pasarlos por el umbral los convertiría en una
+   afirmación sobre el tiempo que nadie hizo. */
+function estadoTaller(seg, estadoServidor) {
+  if (estadoServidor === "cerrado" || estadoServidor === "no sé") return estadoServidor;
+  if (seg === null || seg === undefined) return estadoServidor;
+  if (!D || !D.umbrales_taller) return estadoServidor;
+  if (seg < D.umbrales_taller.fresco) return "trabajando";
+  if (seg < D.umbrales_taller.tibio) return "dudoso";
+  return "sin señal";
+}
+
+function filaSubagente(a) {
+  var seg = haceVivo(a.quieto_hace);
+  var e = estadoTaller(seg, a.estado);
+  var h = '<div class="subagente" data-estado="' + esc(a.estado) + '">' +
+    '<div class="que">' + esc(a.descripcion || "(sin descripción)") + '</div>' +
+    '<div class="chips" data-quieto="' +
+    (a.quieto_hace === null || a.quieto_hace === undefined ? "" : a.quieto_hace) +
+    '" data-estado="' + esc(a.estado) + '">' +
+    '<span class="chip chip-taller ' + (CLASE_TALLER[e] || "nose") + '">' +
+    esc(e) + '</span>' +
+    '<span class="chip">' + esc(a.tipo) + '</span>' +
+    '<span class="chip"><b class="reloj-taller">' + esc(hace(seg)) +
+    '</b>escribió</span>' +
+    (a.modelo ? '<span class="chip">' + esc(a.modelo) + '</span>' : '') +
+    (a.worktree ? '<span class="chip">worktree</span>' : '') +
+    '</div>' +
+    (a.motivo_estado ? '<div class="porque">' + esc(a.motivo_estado) + '</div>' : '');
+  for (var i = 0; i < (a.hijos || []).length; i++) h += filaSubagente(a.hijos[i]);
+  return h + '</div>';
+}
+
+function pintarTaller() {
+  var cont = document.getElementById("taller");
+  var t = (D && D.taller) || null;
+  document.getElementById("alcance").textContent =
+    t ? t.alcance : "esta máquina · ahora";
+  if (!t) { cont.innerHTML = ""; return; }
+  /* No se pudo mirar y cero sesiones son cosas distintas, y la diferencia es
+     justo la que un tablero suele borrar. */
+  if (!t.ok) {
+    cont.innerHTML = '<div class="tarjeta"><h2>El taller no se pudo leer</h2>' +
+      '<div class="tenue">' + esc(t.error) + '</div></div>';
+    return;
+  }
+  if (!t.sesiones.length) {
+    cont.innerHTML = '<div class="nada">ninguna sesión de Claude Code abierta ' +
+      'en esta máquina. Los agentes de otra máquina no se ven acá: eso lo ' +
+      'contesta GitHub, arriba</div>';
+    return;
+  }
+  var h = "";
+  for (var i = 0; i < t.sesiones.length; i++) {
+    var s = t.sesiones[i];
+    h += '<div class="sesion"><div class="cab"><b>' + esc(s.nombre || s.sesion) +
+      '</b><span class="chip ' + (s.viva ? "r-trabajando" : "r-cerrado") + '">' +
+      (s.viva ? "prendida" : "el proceso no está") + '</span>' +
+      '<span class="chip' + (s.proyecto ? '' : ' nose') + '">' +
+      esc(s.proyecto || "carpeta que capataz no vigila") + '</span></div>' +
+      '<div class="tenue">' + esc(s.cwd) + '</div>';
+    if (!s.agentes.length) {
+      h += '<div class="porque">' + esc(s.motivo_sin_agentes ||
+        "sin subagentes") + '</div>';
+    }
+    for (var j = 0; j < s.agentes.length; j++) h += filaSubagente(s.agentes[j]);
+    h += '</div>';
+  }
+  cont.innerHTML = h;
+}
+
 function pintar(d) {
   D = d;
   T_RECIBIDO = Date.now();
@@ -594,6 +722,17 @@ function pintar(d) {
      pantalla que se mira fija. */
   var firma = JSON.stringify(d.agentes) + "|" + JSON.stringify(DESPIERTOS);
   if (firma !== FIRMA) { FIRMA = firma; pintarAgentes(); }
+
+  /* Con la misma disciplina: se repinta sólo si cambió. Un subagente que
+     escribe cada dos segundos cambiaría el mtime todo el tiempo, así que la
+     firma ignora el reloj y mira quién está y en qué estado. */
+  var firmaT = JSON.stringify((d.taller && d.taller.sesiones || []).map(
+    function (s) {
+      return [s.sesion, s.viva, s.proyecto, (s.agentes || []).map(function f(a) {
+        return [a.id, a.estado, (a.hijos || []).map(f)];
+      })];
+    })) + "|" + ((d.taller && d.taller.ok) ? "ok" : (d.taller && d.taller.error));
+  if (firmaT !== FIRMA_TALLER) { FIRMA_TALLER = firmaT; pintarTaller(); }
 
   var h = "";
   if (d.sin_proyectos) {

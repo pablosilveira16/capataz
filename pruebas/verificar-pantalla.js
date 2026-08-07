@@ -74,7 +74,9 @@ function armarPantalla() {
     cabecera: nodo(), cuerpo: nodo(),
     // Los tres de la vista primaria. Sin ellos `pintarAgentes()` escribiría
     // sobre `undefined` y este arnés se caería antes de afirmar nada.
-    agentes: nodo(), frescura: nodo(), pulso: nodo()
+    agentes: nodo(), frescura: nodo(), pulso: nodo(),
+    // Y los dos del taller, por lo mismo.
+    taller: nodo(), alcance: nodo()
   };
   const relojes = [];
   const contexto = {
@@ -487,6 +489,90 @@ af("y si el servidor deja de contestar, la pantalla lo dice en vez de seguir " +
    p7.frescura.textContent.indexOf("sin contacto") >= 0, p7.frescura.textContent);
 af("con hace cuánto que no sabe nada, que es lo accionable",
    /\d+ s/.test(p7.frescura.textContent), p7.frescura.textContent);
+
+/* -------------------------------------------------------------------------
+   § 8 · El taller — y que su alcance se vea
+
+   La sección nueva muestra los agentes de ESTA máquina. Dos cosas tienen que
+   ser ciertas en la pantalla y no sólo en el lector: que `sin señal` no se
+   pinte como un desenlace —terminado y colgado no se distinguen— y que el
+   alcance esté a la vista, porque tres agentes locales mostrados como si
+   fueran la flota son el tablero que miente.
+------------------------------------------------------------------------- */
+console.log("\n§ 8 · El taller");
+
+const p8 = pintarCon(datos);
+af("el alcance está escrito, no es una nota al pie",
+   p8.alcance.textContent.indexOf("esta máquina") >= 0, p8.alcance.textContent);
+af("con los datos de verdad, el taller dibuja algo",
+   p8.taller.innerHTML.length > 50, String(p8.taller.innerHTML.length));
+
+/* Un taller a mano con los cinco desenlaces, para que ninguno quede sin pintar
+   por lo que haya corriendo en la máquina en este momento. */
+function conTaller(sesiones, ok, error) {
+  const d = copia(datos);
+  d.taller = { ok: ok === undefined ? true : ok, error: error || "",
+               raiz: "/x/.claude", alcance: "esta máquina · ahora",
+               leido_en: d.ahora, sesiones: sesiones,
+               cuenta: { sesiones: sesiones.length, vivas: 1, agentes: 0,
+                         trabajando: 0 }, sueltas: 0 };
+  return d;
+}
+
+function agente(id, estado, quieto, hijos) {
+  return { id: id, tipo: "general-purpose", descripcion: "el " + id,
+           profundidad: hijos ? 1 : 2, padre: null, modelo: null,
+           worktree: null, arrancado: 1, ultimo: 1, quieto_hace: quieto,
+           estado: estado, motivo_estado: estado === "sin señal"
+             ? "terminado y colgado no se distinguen desde acá" : "",
+           hijos: hijos || [] };
+}
+
+const sesion = {
+  pid: 1, viva: true, sesion: "s-1", nombre: "una-sesion", cwd: "/x/proy",
+  arrancada: 1, version: "2.1.221", entrada: "claude-desktop", error: "",
+  proyecto: "Capataz", motivo_sin_agentes: "",
+  agentes: [agente("padre", "trabajando", 3, [agente("hijo", "dudoso", 600)]),
+            agente("mudo", "sin señal", 9000),
+            agente("ido", "cerrado", 50)]
+};
+const p8b = pintarCon(conTaller([sesion]));
+const htmlT = p8b.taller.innerHTML;
+
+af("«sin señal» se pinta con la pinta de «no sé» y NUNCA verde",
+   /r-sinsenal/.test(htmlT) && !/r-sinsenal[^"]*verde/.test(htmlT), htmlT.slice(0, 120));
+af("y dice por qué: que terminado y colgado no se distinguen",
+   htmlT.indexOf("no se distinguen") >= 0);
+af("«cerrado» tampoco es verde: el proceso no está, no es un logro",
+   /r-cerrado/.test(htmlT));
+/* La anti-vacua de las tres de arriba: sin esto pasarían igual con una
+   pantalla que no pinta de color nunca. */
+af("y un agente trabajando SÍ lleva la clase de trabajando",
+   /r-trabajando/.test(htmlT));
+af("el subagente anidado se dibuja adentro del padre",
+   htmlT.indexOf("el hijo") > htmlT.indexOf("el padre"));
+af("la sesión dice de qué proyecto es la carpeta", htmlT.indexOf("Capataz") >= 0);
+
+/* Los umbrales llegan del servidor. Sin ellos no se inventa ninguno. */
+const ctxT = p8b.contexto;
+af("con los umbrales del servidor, el estado se recalcula con el reloj",
+   ctxT.estadoTaller(1, "sin señal") === "trabajando" &&
+   ctxT.estadoTaller(999999, "trabajando") === "sin señal");
+af("pero «cerrado» no se recalcula: es un hecho medido, no un rato",
+   ctxT.estadoTaller(1, "cerrado") === "cerrado");
+af("ni «no sé»: es la ausencia de transcripción",
+   ctxT.estadoTaller(1, "no sé") === "no sé");
+
+/* No pude mirar ≠ no hay nadie. Es la distinción que un tablero suele borrar. */
+const p8c = pintarCon(conTaller([], false, "no encontré /x/.claude · CAPATAZ_TALLER"));
+af("si el taller no se pudo leer, se dice y se nombra lo que buscó",
+   p8c.taller.innerHTML.indexOf("/x/.claude") >= 0, p8c.taller.innerHTML.slice(0, 120));
+const p8d = pintarCon(conTaller([]));
+af("y cero sesiones es otra cosa: se dice que no hay ninguna abierta",
+   p8d.taller.innerHTML.indexOf("ninguna sesión") >= 0,
+   p8d.taller.innerHTML.slice(0, 120));
+af("y avisa que los de otra máquina no se ven acá",
+   p8d.taller.innerHTML.indexOf("otra máquina") >= 0);
 
 console.log("\nASERCIONES: " + ASER + "\nROJAS: " + ROJAS);
 process.exit(ROJAS ? 1 : 0);

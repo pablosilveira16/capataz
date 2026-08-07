@@ -741,3 +741,115 @@ literal** en vez de suponerlo. Parecía estar en `270bb84` —commit ya empujado
 o sea reescribir historia publicada y forzar un push—, y estaba sólo en
 `0706590`: la rama local de respaldo de la copia divergida, que nunca salió de
 la Mac. Un `commit --amend` sobre una rama que nadie más tiene, y listo.
+
+---
+
+# Tanda 3 · El taller: lo que git no puede contestar
+
+Pablo preguntó si convenía un front nuevo para el *agent viewer* que Claude Code
+liberó, con todos los agentes y subagentes en una pantalla. La respuesta fue que
+no, y el motivo es el que ordena toda esta tanda: **capataz ya es esa pantalla.
+Lo que le faltaba no era front, era una segunda fuente.**
+
+## La pregunta que git no puede contestar
+
+`nube.py` contesta *qué quedó publicado* y lo lee de GitHub, que es el árbitro.
+Nadie le puede pedir que conteste *si un proceso está corriendo ahora*: eso no
+está en git y no puede estar. Hasta hoy capataz lo aproximaba mirando si la rama
+de un agente se había movido, y por eso la regla 3 lo obliga a decir `dudoso`.
+
+El punto T12 había rechazado, con razón, «dejar un segundo camino de lectura
+local». La diferencia que habilita `taller.py` —y que quedó escrita en su
+docstring, porque es toda su justificación— es ésta:
+
+> T12 rechazaba leer **el mismo dato** desde dos lugares sin regla de cuál gana.
+> Acá se lee un dato **que git no puede tener**. No hay dos versiones del mismo
+> hecho, así que no hay cuál-gana que decidir.
+
+## Lo que se midió antes de escribir una línea
+
+Ninguna de las decisiones de abajo salió de la documentación. La doc dice que
+`claude agents --json` existe; lo que hizo falta saber es qué devuelve **acá**.
+
+- **`claude agents --json` no muestra subagentes.** Lo dice la doc y se
+  confirmó: lista sesiones, no árboles. Para lo que Pablo pedía, no alcanza.
+- **Y devuelve menos que el archivo**: seis campos contra los once de
+  `~/.claude/sessions/<pid>.json`. `state` y `waitingFor` son *background only*
+  y no hay sesiones background en esta máquina. Por eso capataz **lee los
+  archivos y no llama al CLI** → T22.
+- **El árbol está en los `.meta.json`**, de 130 bytes: `agentType`,
+  `description` —ya escrita para un humano—, `spawnDepth` y, cuando hay
+  anidamiento, **`parentAgentId`**. Ese campo no aparecía en ninguno de los 17
+  casos viejos porque todos eran de profundidad 1; apareció lanzando un
+  subagente que lanzara otro. **No hace falta abrir un solo transcripto para
+  dibujar la jerarquía**, que era el miedo de diseño.
+- **Los transcriptos se escriben por append**, así que la pantalla puede latir:
+  crecen cada pocos segundos mientras el agente trabaja.
+- **El umbral se midió, no se eligió.** Sobre 2830 huecos entre líneas: un
+  agente **que sí está trabajando** puede quedarse callado hasta **272 s**
+  (p99 = 50 s). `FRESCO` quedó en 5 minutos, arriba del máximo observado. Con
+  un minuto, uno de cada cien agentes vivos se vería como caído.
+
+## La señal que se descartó, que es lo que más vale de la tanda
+
+No hay marca de cierre adentro del `.jsonl` de un subagente: uno en curso y uno
+terminado son indistinguibles por su última línea. Sin eso, capataz mostraba
+`caído` a dos agentes de Finca 360 que habían **terminado bien** dos horas
+antes — o sea inventaba un incendio, el mismo error que `estado_rama` ya evita
+con `integrada`.
+
+Se probó una segunda señal para salvarlo sin abrir transcripciones: *«si el
+padre escribió después de que el hijo se calló, el hijo terminó»*. **Dio
+verdadero en los 17 casos y se descartó igual**, por dos motivos:
+
+1. Los 17 son agentes **terminados**. Cero casos negativos: una señal que nunca
+   se vio decir que no, no se sabe si sabe decir que no. Es la aserción vacua
+   del § 2 de `CLAUDE.md`, disfrazada de evidencia.
+2. Tiene contraejemplo medido: un subagente en background **no frena al padre**,
+   así que el padre escribe mientras el hijo trabaja.
+
+Por eso el desenlace se llama **`sin señal`** y dice el rato, en vez de `caído`
+o `terminado`. Las dos palabras que faltan son el resultado, no un pendiente
+→ T19.
+
+## Lo que se vio rojo, a propósito
+
+Cinco bugs puestos de vuelta, cada uno revertido y confirmado con `diff -q`:
+
+| Bug puesto | Lo que se puso rojo |
+|---|---|
+| `_abrir` sin la compuerta de extensión | 3 rojas: una transcripción se podía abrir |
+| `_arbol` filtrando huérfanos en silencio | 1 roja: un agente desaparecía de la pantalla |
+| Volver a decir `caído` | 5 rojas, **una de ellas contra los agentes reales** |
+| `leer()` guardando estado propio | 2 rojas: el AST y la huella del disco, por separado |
+| `sin señal` pintado de verde | 1 roja en la pantalla ejecutada |
+
+## Lo que se miró con los ojos, y que ningún arnés encontró
+
+Tres cosas aparecieron recién al abrir la pantalla en 375 px, con los 495 en
+verde:
+
+- Los `**` de markdown salían **literales**: el texto era para un archivo y
+  terminó en un chip.
+- El motivo de `sin señal` era un párrafo de cuatro renglones al lado de un chip
+  de una palabra, y tapaba a los otros agentes.
+- `.porque` estaba escrito como **descendiente** de `.subagente`, así que el
+  mensaje de una sesión sin subagentes salía en cuerpo grande, con nueve
+  renglones de ruta para decir «no pasa nada».
+
+Ninguna es un bug de lógica y las tres arruinaban la pantalla. La regla vieja
+—«el ancho angosto hay que mirarlo»— se ganó otro día.
+
+## Y una premisa vieja que se cayó sola
+
+T17 decía que `node` no estaba instalado y que instalarlo pedía la contraseña de
+Pablo. **Ya estaba instalado** hacía días, en `~/.local`. Lo que fallaba era el
+PATH: `.zshrc` lo exporta y `.zshrc` sólo lo lee la shell **interactiva**. El
+arreglo fue una línea en `~/.zprofile`, sin contraseña de nadie. Es la segunda
+premisa envejecida de este proyecto —la primera fue el `erp360` «privado» de
+T15— y las dos se cayeron por lo mismo: **nadie las volvió a medir.**
+
+## El total
+
+**495 aserciones en verde**, contra 431 al empezar. Las 64 nuevas: 50 del arnés
+de `taller.py` y 14 de la pantalla.
