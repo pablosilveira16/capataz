@@ -65,5 +65,16 @@ que ésos, cerrá primero.
 - La skill **sólo lee**. Es la regla 1 de capataz aplicada a los archivos de
   Claude Code: mirar y mostrar, nunca escribir.
 
+## Instalarla para toda la máquina
+
+Dentro de este repo la skill anda sola. Para que la vea **cualquier** sesión
+—en cualquier carpeta—:
+
+    ./ops/instalar-skill-consumo.sh
+
+La engancha con un enlace simbólico en `~/.claude/skills/` (una sola fuente:
+el repo). Correrlo dos veces no rompe nada, y si en el destino hay algo que
+no es un enlace, se niega en vez de pisarlo.
+
 Arnés: `pruebas/verificar-consumo.py` — se ejercita contra transcripciones
 armadas en `/tmp` con números conocidos, como manda `CLAUDE.md` § 2.

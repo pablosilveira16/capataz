@@ -86,4 +86,5 @@ comandos de git pasan por una lista blanca de subcomandos de lectura;
 | `ops/00-mapa.md` | Este |
 | `ops/70-credenciales.md` | El token de GitHub: cómo se crea, dónde vive, cómo se revoca |
 | `ops/90-volver-atras.md` | La marcha atrás. Escrita **antes** que cualquier despliegue |
+| `ops/instalar-skill-consumo.sh` | Engancha la skill `consumo-sesion` en `~/.claude/skills/` para toda sesión de la máquina |
 | `10-crear-qas.md`, `30-desplegar.md`, `40-promover.md` | **No existen**, y no se escriben hasta que X2 se decida |

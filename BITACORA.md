@@ -460,3 +460,24 @@ El rojo que se miró: con la pregunta saliendo sólo en `parar`, el arnés dio
 **2 rojas** — el umbral de `cerrar`, que es justo donde la pregunta llega a
 tiempo, quedaba mudo. Revertido con `diff -q`. El arnés quedó en **40
 aserciones** y la suite en **311 en verde**.
+
+## T13 — instalada para cualquier sesión, con enlace y no con copia
+
+El pedido: que la skill valga para toda sesión de la máquina, no sólo las
+que abren este repo. El lugar es `~/.claude/skills/`, donde Claude Code
+busca las skills personales, y `ops/instalar-skill-consumo.sh` la engancha
+ahí con un **enlace simbólico** al repo. Enlace y no copia por la regla 1:
+una copia es el segundo lugar con el mismo dato — se pudre sola, y el día
+que difieran nadie sabe cuál gana. Con el enlace, `git pull` actualiza la
+skill instalada.
+
+Dos comportamientos que el arnés ejercita corriendo el instalador contra
+una raíz de mentira: es idempotente (re-enlaza), y si en el destino hay
+algo que **no** es un enlace —una copia editada, otra skill homónima— se
+niega y lo dice, porque pisar lo de otro no es instalar. El rojo que se
+miró: con el bug de `rm -rf` en vez de negarse, **3 rojas**. El arnés quedó
+en **48 aserciones**.
+
+Quedó corrido en esta máquina (el contenedor); en la Mac es el mismo
+comando desde el repo. Ojo: cada máquina se instala una vez — un contenedor
+nuevo arranca limpio, pero ahí la skill igual se ve al abrir este repo.

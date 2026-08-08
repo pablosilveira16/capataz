@@ -308,9 +308,55 @@ afirmar("subprocess" not in fuente and "os.system" not in fuente,
         "y no corre ningún comando: lee archivos, nada más")
 
 # ------------------------------------------------------------------
-# 7 · La skill existe y apunta a lo que corre
+# 7 · La instalación para toda la máquina — corriendo el instalador
 # ------------------------------------------------------------------
-print("7 · La skill")
+#
+# `ops/instalar-skill-consumo.sh` engancha la skill en `~/.claude/skills/`
+# con un enlace simbólico. Se corre de verdad contra una raíz de mentira
+# (CLAUDE_CONFIG_DIR) y se mira lo que quedó: el enlace, que a través de él
+# se llega al SKILL.md real, que correrlo dos veces no rompe, y que si en el
+# destino hay una carpeta de verdad se NIEGA en vez de pisarla.
+print("7 · El instalador")
+
+INSTALADOR = os.path.join(AQUI, "ops", "instalar-skill-consumo.sh")
+afirmar(os.path.isfile(INSTALADOR), "ops/instalar-skill-consumo.sh existe")
+
+raiz_falsa = os.path.join(tmp, "config-falsa")
+entorno = dict(os.environ)
+entorno["CLAUDE_CONFIG_DIR"] = raiz_falsa
+ri = subprocess.run(["bash", INSTALADOR], stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE, universal_newlines=True,
+                    timeout=30, env=entorno)
+destino = os.path.join(raiz_falsa, "skills", "consumo-sesion")
+afirmar(ri.returncode == 0, "el instalador corre y sale bien",
+        (ri.stdout + ri.stderr)[:200])
+afirmar(os.path.islink(destino), "deja un enlace simbólico, no una copia",
+        "una copia es el segundo lugar con el mismo dato — regla 1")
+afirmar(os.path.isfile(os.path.join(destino, "SKILL.md")),
+        "a través del enlace se llega al SKILL.md de verdad")
+
+ri2 = subprocess.run(["bash", INSTALADOR], stdout=subprocess.PIPE,
+                     stderr=subprocess.PIPE, universal_newlines=True,
+                     timeout=30, env=entorno)
+afirmar(ri2.returncode == 0 and os.path.islink(destino),
+        "correrlo dos veces no rompe nada: re-enlaza y listo")
+
+os.remove(destino)
+os.makedirs(os.path.join(destino, "cosas"))     # una carpeta DE VERDAD
+ri3 = subprocess.run(["bash", INSTALADOR], stdout=subprocess.PIPE,
+                     stderr=subprocess.PIPE, universal_newlines=True,
+                     timeout=30, env=entorno)
+afirmar(ri3.returncode != 0, "con una carpeta de verdad en el destino se niega",
+        "pisar lo de otro no es instalar")
+afirmar(os.path.isdir(os.path.join(destino, "cosas")),
+        "…y la carpeta ajena queda intacta")
+afirmar("no lo piso" in ri3.stderr, "…y el mensaje dice qué pasó y qué hacer",
+        ri3.stderr[:200])
+
+# ------------------------------------------------------------------
+# 8 · La skill existe y apunta a lo que corre
+# ------------------------------------------------------------------
+print("8 · La skill")
 
 afirmar(os.path.isfile(SKILL), ".claude/skills/consumo-sesion/SKILL.md existe")
 with io.open(SKILL, encoding="utf-8") as f:
