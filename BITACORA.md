@@ -438,3 +438,25 @@ la falla que el arnés existe para atrapar: un consumo subestimado que le
 dice «seguí tranquilo» a una sesión que está por chocar. Revertido y
 confirmado con `diff -q`, la suite quedó en **302 aserciones en verde**
 (268 + 32 del arnés nuevo + 2 filas nuevas del seguimiento: T10 y T11).
+
+## T12 — al umbral se pregunta, no se decide solo
+
+Pedido de Pablo al ver la skill andando: «que me envíen una pregunta cuando
+se llegue al umbral y yo me fijo si se ajusta a la realidad». Tiene razón por
+un motivo concreto: la medición local **no descuenta la compactación
+automática**, así que el número real de margen lo ve él en su panel de uso,
+no el script. La forma honesta de manejar un dato que otro tiene mejor es la
+misma de siempre: mostrar lo que se midió y preguntar.
+
+Cómo quedó: con decisión `cerrar` o `parar`, el reporte trae `pregunta` ya
+redactada con los números medidos —usado, ventana, ritmo— y la skill manda al
+agente a enviarla (`AskUserQuestion` si está) antes de actuar. Tres reglas:
+la respuesta **corrige, no reemplaza** (si Pablo dice que hay más lugar, se
+sigue y se ajusta con `--ventana`); **desatendido no se bloquea** — vale la
+tabla, que peca de prudente; y **lejos del umbral no hay pregunta**, por el
+corolario de la regla 3: un aviso que sale siempre enseña a ignorarse.
+
+El rojo que se miró: con la pregunta saliendo sólo en `parar`, el arnés dio
+**2 rojas** — el umbral de `cerrar`, que es justo donde la pregunta llega a
+tiempo, quedaba mudo. Revertido con `diff -q`. El arnés quedó en **40
+aserciones** y la suite en **311 en verde**.

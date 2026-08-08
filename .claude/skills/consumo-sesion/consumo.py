@@ -123,7 +123,8 @@ def crecimiento_por_turno(turnos, ultimos=10):
 def informe(archivo, ventana_a_mano=None):
     r = {"archivo": archivo, "modelo": None, "ventana": None, "usado": None,
          "pct": None, "restante": None, "crecimiento_por_turno": None,
-         "turnos_estimados": None, "decision": "no sé", "motivo": None}
+         "turnos_estimados": None, "decision": "no sé", "motivo": None,
+         "pregunta": None}
 
     if not archivo or not os.path.isfile(archivo):
         r["motivo"] = "no hay transcripción: sin el archivo no hay número"
@@ -157,6 +158,22 @@ def informe(archivo, ventana_a_mano=None):
         r["decision"] = "cerrar"
     else:
         r["decision"] = "parar"
+
+    # Al umbral no se decide solo: se arma la pregunta para Pablo, con los
+    # números medidos, y él contrasta contra su panel de uso. La medición
+    # local no descuenta la compactación automática — el dato real lo tiene
+    # él. Su respuesta corrige; sin respuesta posible, vale la tabla.
+    if r["decision"] in ("cerrar", "parar"):
+        ritmo = (", creciendo ~%s por turno (~%s turnos más)"
+                 % (miles(r["crecimiento_por_turno"]),
+                    miles(r["turnos_estimados"]))
+                 if r["turnos_estimados"] is not None else "")
+        r["pregunta"] = (
+            "Medí %s de %s tokens de contexto ocupados (%d %%)%s. Mi decisión "
+            "por tabla es «%s». ¿Se ajusta a lo que ves en tu panel de uso? "
+            "¿Sigo, cierro lo abierto, o paro y dejo todo escrito?"
+            % (miles(r["usado"]), miles(r["ventana"]),
+               round(r["pct"] * 100), ritmo, r["decision"]))
     return r
 
 
@@ -181,6 +198,8 @@ def imprimir(r):
               % (miles(r["crecimiento_por_turno"]), cola))
     print("  decisión        %s%s"
           % (r["decision"], (" — %s" % r["motivo"]) if r["motivo"] else ""))
+    if r["pregunta"]:
+        print("  pregunta        %s" % r["pregunta"])
     print()
 
 

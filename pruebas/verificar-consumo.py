@@ -175,12 +175,33 @@ print("3 · Los umbrales")
 codigo, r, _ = correr(sesion, "--json", "--ventana", "4000")
 afirmar(codigo == 0 and (r or {}).get("decision") == "cerrar",
         "al 75 %% la decisión es cerrar", str((r or {}).get("decision")))
+pregunta = (r or {}).get("pregunta") or ""
+afirmar("3.002" in pregunta and "4.000" in pregunta,
+        "…y trae la pregunta para Pablo con los números medidos adentro",
+        pregunta[:120] or "(sin pregunta)")
+afirmar("panel de uso" in pregunta,
+        "…que le pide contrastar contra su panel de uso, no que confíe")
+
 codigo, r, _ = correr(sesion, "--json", "--ventana", "3300")
 afirmar(codigo == 0 and (r or {}).get("decision") == "parar",
         "al 91 %% la decisión es parar", str((r or {}).get("decision")))
 afirmar((r or {}).get("restante") == 298,
         "y el restante acompaña a la ventana apretada: 3300 − 3002 = 298",
         str((r or {}).get("restante")))
+afirmar("parar" in ((r or {}).get("pregunta") or ""),
+        "al parar la pregunta dice la decisión de tabla, para que Pablo corrija")
+
+# Y en la salida para humanos, la pregunta se ve — no sólo en el JSON.
+codigo, _d, salida = correr(sesion, "--ventana", "3300")
+afirmar(codigo == 0 and "pregunta" in salida and "¿" in salida,
+        "la salida para humanos también trae la pregunta", salida[:200])
+
+# Lejos del umbral NO hay pregunta: una pregunta que sale siempre se ignora,
+# y el día que dice algo tampoco se lee (CLAUDE.md § 3, corolario).
+codigo, r, _ = correr(sesion, "--json")
+afirmar(codigo == 0 and (r or {}).get("pregunta") is None,
+        "con la sesión holgada no hay pregunta: no se molesta por deporte",
+        str((r or {}).get("pregunta")))
 
 # ------------------------------------------------------------------
 # 4 · «No sé» nunca verde
@@ -298,6 +319,12 @@ afirmar("consumo.py" in skill, "la skill dice qué script correr")
 afirmar("no sé" in skill, "la skill trae la regla de «no sé» nunca verde")
 afirmar("verificar-consumo" in skill,
         "la skill nombra este arnés, para que el que la toque sepa qué corre")
+afirmar("preguntar" in skill.lower() and "AskUserQuestion" in skill,
+        "la skill dice que al umbral se pregunta, y con qué herramienta")
+afirmar("corrige, no reemplaza" in skill,
+        "…y que la respuesta de Pablo corrige la tabla, no la reemplaza")
+afirmar("Sin respuesta posible" in skill,
+        "…y qué hacer desatendido: vale la tabla, no quedarse bloqueado")
 
 shutil.rmtree(tmp, ignore_errors=True)
 

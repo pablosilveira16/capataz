@@ -26,9 +26,26 @@ El campo `decision` sale de la fracción de ventana ocupada:
 | decisión | cuándo | qué hacer |
 |---|---|---|
 | `seguir` | menos del 70 % | trabajar normal |
-| `cerrar` | 70–85 % | no emprender nada nuevo y grande; terminar lo abierto y dejar `SEGUIMIENTO.md` al día |
-| `parar` | más del 85 % | cerrar por escrito **ya**: `SEGUIMIENTO.md`, `BITACORA.md`, commit. Lo que quede, anotado como pendiente |
+| `cerrar` | 70–85 % | **preguntar primero** (ver abajo); mientras no haya respuesta: nada nuevo y grande, terminar lo abierto y dejar `SEGUIMIENTO.md` al día |
+| `parar` | más del 85 % | **preguntar primero**; mientras no haya respuesta: cerrar por escrito **ya** — `SEGUIMIENTO.md`, `BITACORA.md`, commit. Lo que quede, anotado como pendiente |
 | `no sé` | falta un dato | ver `motivo`; no tratar «no sé» como verde |
+
+## Al llegar al umbral: preguntar, no decidir solo
+
+Cuando la decisión sale `cerrar` o `parar`, el reporte trae el campo
+`pregunta` ya redactado con los números medidos. **Mandásela a Pablo antes
+de actuar** —con `AskUserQuestion` si está disponible, o como pregunta
+directa— para que contraste contra lo que ve en su panel de uso: esta
+medición no descuenta la compactación automática, así que el dato real lo
+tiene él.
+
+Su respuesta **corrige, no reemplaza**:
+
+- «hay más lugar del que decís» → seguí, y volvé a medir más seguido; si te
+  dice cuánto, ajustá con `--ventana`.
+- «sí, se ajusta» → aplicá lo que dice la tabla.
+- **Sin respuesta posible** (sesión desatendida) → no te quedes bloqueado
+  esperando: vale la tabla, que peca de prudente a propósito.
 
 `crecimiento_por_turno` y `turnos_estimados` son el pronóstico: el promedio
 de lo que creció el contexto en los últimos turnos, y cuántos turnos así
