@@ -32,7 +32,8 @@ correr() {
 }
 
 echo
-for f in verificar-lector.py verificar-angosto.py verificar-credenciales.py; do
+for f in verificar-lector.py verificar-angosto.py verificar-credenciales.py \
+         verificar-consumo.py; do
   [ -f "pruebas/$f" ] && correr "$f" python3; done
 for f in verificar-contrato.sh; do
   correr "$f" bash; done

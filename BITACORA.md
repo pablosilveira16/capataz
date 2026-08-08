@@ -378,3 +378,63 @@ dice el capítulo de arriba:
 - **T9** — capataz no tiene `ops/60-roles.md`, así que la tarjeta de **su propio**
   proyecto dice «qué roles existen · no sé». Es correcto y es feo: capataz es el
   único de los tres que puede arreglarlo sin tocar el repo de nadie.
+
+---
+
+# Tanda 2 — la skill de consumo de la sesión, 2026-08-08
+
+## De dónde sale
+
+De una pregunta de Pablo: si un agente puede consultar las estadísticas de
+consumo de tokens que él ve como usuario. La respuesta corta es que para una
+cuenta individual **no hay API** —la Usage & Cost Admin API existe pero es
+sólo para organizaciones de la Consola, con Admin key— y la larga es que no
+hace falta: Claude Code deja la transcripción de cada sesión como JSONL en
+`~/.claude/projects/<carpeta>/`, y cada turno del asistente trae su bloque
+`usage` con los cuatro números que importan (entrada sin caché, caché leída,
+caché escrita, salida). La suma del último turno **es** el contexto ocupado.
+
+Con eso, el pedido concreto —«que la sesión sepa cuántos tokens le quedan y
+decida si seguir trabajando»— se vuelve un lector de archivos. Territorio
+conocido: es la misma clase de programa que `lector.py`, con las mismas
+reglas.
+
+## Las decisiones, y por qué
+
+**Sólo lee, verificado como en la regla 1.** La transcripción es de Claude
+Code, no nuestra. El arnés lo comprueba por las dos mitades: corre el script
+con la carpeta de las transcripciones en sólo lectura, y mira que el fuente
+no tenga ningún `open()` de escritura ni corra comandos. Una sola de las dos
+sería débil — la estática es leer-y-buscar-una-cadena, la dinámica no ve un
+log escrito en otro lado.
+
+**La ventana por modelo es una tabla escrita, y lo que no está dice «no sé».**
+La tentación era adivinar 200k para cualquier modelo desconocido. No: un
+«te quedan 150k» inventado es el tablero que miente en el caso que importa,
+y al que miente se le cree (regla 3). Modelo fuera de la tabla → decisión
+`no sé` con el arreglo en el motivo (`--ventana N`). El costo es T11: la
+tabla se pudre en silencio y quedó anotado apenas apareció.
+
+**Los umbrales son conservadores a propósito** (70 % seguir, 85 % cerrar,
+más parar). El número no descuenta la compactación automática de Claude
+Code, así que el error queda del lado barato: cerrar un rato antes en vez de
+cortarse a mitad de un cierre. Y «parar» no apaga nada — significa dejar
+`SEGUIMIENTO.md` y `BITACORA.md` escritos y commiteados, que es exactamente
+la situación para la que el seguimiento existe («la sesión que se corta»).
+
+**El subagente no suma.** Las líneas con `isSidechain` tienen su propia
+ventana de contexto; sumarlas infla el usado de la sesión principal con
+tokens que no la ocupan. El arnés lo prueba con un subagente de 999.999
+tokens metido en el medio de la transcripción de prueba: si contara, el
+usado no daría 3.002.
+
+## El rojo que se miró
+
+Se le sacó `cache_read_input_tokens` a la suma —el error más probable de
+este lector, porque es el sumando gigante que un ojo apurado confunde con
+«eso ya está pagado»— y el arnés se puso rojo con **8 rojas**: el usado dio
+502 en vez de 3.002 y las tres decisiones de umbral dieron `seguir`. Ésa es
+la falla que el arnés existe para atrapar: un consumo subestimado que le
+dice «seguí tranquilo» a una sesión que está por chocar. Revertido y
+confirmado con `diff -q`, la suite quedó en **302 aserciones en verde**
+(268 + 32 del arnés nuevo + 2 filas nuevas del seguimiento: T10 y T11).

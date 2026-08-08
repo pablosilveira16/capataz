@@ -79,7 +79,7 @@ más abajo, en la tanda donde nació.
 | T6 | **El CI está escrito y nadie lo vio correr.** `.github/workflows/verificar.yml` existe y corre `./verificar.sh` y nada más; se ensayó clonando el repo a `/tmp` —donde los proyectos vecinos no existen, igual que en el runner— y la suite dio **268 aserciones en verde**, el mismo número que en la carpeta de trabajo. Eso es la mitad: **falta ver una corrida de verdad**, y desde acá no se puede → D4. Queda `pendiente` a propósito: un `hecho` que nadie vio correr es exactamente la clase de línea que esta tanda tuvo que reconciliar | 2026-08-06 | pendiente |
 | T8 | **El total de aserciones se mueve con el largo de este archivo.** `verificar-contrato.sh` cuenta **una aserción por fila con columna `Estado`** —honesto, cada fila se verifica de verdad— pero eso hace que agregar un punto suba el total sin que se haya verificado nada nuevo, y entonces «el total bajó» deja de ser una señal limpia. La salida es contar las filas en **una** aserción («ninguna de las N celdas usa una palabra fuera de las cinco») más otra de piso («hay al menos N filas»), que conserva la propiedad de que cero es falla. Es un cambio de diseño de un arnés ajeno, así que va como punto y no de paso | 2026-08-06 | pendiente |
 | T9 | **Capataz no tiene `ops/60-roles.md`**, así que la tarjeta de su **propio** proyecto dice «qué roles existen · no sé». Es correcto —no se inventa la lista de otro— y es el único de los tres proyectos que puede arreglarlo sin tocar el repositorio de nadie. Va con la lista de roles que este proyecto use de verdad, no con la de seis copiada de ERP 360 | 2026-08-06 | pendiente |
-| T10 | **Una skill que lea el consumo de tokens de la sesión** (`.claude/skills/consumo-sesion/`). Claude Code deja el `usage` de cada turno en los JSONL de `~/.claude/projects/`; con eso se calcula cuánto contexto ocupó la sesión, cuánto queda y a qué ritmo crece, y se decide **seguir, cerrar o parar**. Sólo lee —igual que capataz— y lo que no sabe (la ventana de un modelo desconocido, una transcripción que no está) dice «no sé», nunca un número inventado | 2026-08-08 | en curso (agente) |
+| T11 | **La ventana por modelo de la skill de consumo está escrita a mano** (`VENTANAS` en `.claude/skills/consumo-sesion/consumo.py`). Hoy es correcta y es la clase de tabla que se pudre en silencio: un modelo nuevo cae en «no sé» —que es lo honesto— pero nadie se entera de que hay que agregarlo hasta que molesta. Falta decidir dónde se anota el ritual de revisarla cuando cambie el modelo de las sesiones | 2026-08-08 | pendiente |
 
 ### Decidido, esperando el momento
 
@@ -136,3 +136,17 @@ qué se hizo para que no vuelva a pasar— está en `BITACORA.md`, Tanda 1.
 | R4 | **Que el total de aserciones sea comparable.** Medido: 274 en la carpeta de trabajo y 260 en un clon sin vecinos, sin que hubiera cambiado nada — el arnés de la pantalla sumaba una aserción por proyecto | **hecho** · `verificar-pantalla.js` 36 aserciones — agrupado da el mismo número en los dos lados —268 el 2026-08-06— y el detalle sigue diciendo cuál falló |
 | D1 | **Mirar la pantalla en un teléfono** — el requisito que motiva el proyecto | **hecho** · `verificar-angosto.py` 28 + `verificar-pantalla.js` 36 aserciones, **y mirada**: Chrome con un viewport de 360 px de verdad. `scrollWidth == clientWidth == 360`, sin scroll horizontal, la hoja en 340 px, **cero elementos pasando de 360**, las tres tarjetas legibles. Lo que queda —un teléfono físico— ya no bloquea nada |
 | D2 | **El repositorio `github.com/pablosilveira16/capataz` y el token** | **hecho** · `verificar-credenciales.py` 75 aserciones — `main` publicado en `4d08197`, y el permiso **`Workflows: Read and write` confirmado**: el push de esta rama llevó `.github/workflows/verificar.yml` y entró. Es justo el permiso que a ERP 360 le faltó y le rechazó el push entero |
+
+---
+
+## Tanda 2 — la skill de consumo de la sesión, 2026-08-08
+
+Nace de una pregunta de Pablo: si las estadísticas de consumo de tokens se
+pueden leer programáticamente. Para una cuenta individual no hay API — pero
+Claude Code deja el `usage` de cada turno en los JSONL de
+`~/.claude/projects/`, y con eso alcanza. El capítulo está en `BITACORA.md`,
+Tanda 2.
+
+| # | Punto | Estado |
+|---|---|---|
+| T10 | **Una skill que lea el consumo de tokens de la sesión** (`.claude/skills/consumo-sesion/`): cuánto contexto ocupó la sesión, cuánto queda, a qué ritmo crece, y la decisión —**seguir, cerrar o parar**—. Sólo lee, y lo que no sabe dice «no sé» | **hecho** · `verificar-consumo.py` 32 aserciones — transcripciones armadas en `/tmp` con números conocidos. **Visto en rojo** sacando `cache_read_input_tokens` de la suma: 8 rojas |
