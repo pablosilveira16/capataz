@@ -239,5 +239,52 @@ if os.path.isfile(mapa):
     for ocupado in ("5300", "5301", "5302", "5400", "5401"):
         af("ops/00-mapa.md anota el puerto ocupado %s" % ocupado, ocupado in texto)
 
+print("§ 5 · Los dos temas, y que el claro no se olvide ningún color")
+#
+# El tema claro se define dando vuelta los tokens. **Un token que el bloque
+# claro no redefina se queda con el valor oscuro**, y eso sobre papel blanco es
+# un texto invisible o un chip negro: la falla no se ve como error, se ve como
+# un renglón que no está. Por eso lo que se compara son los **conjuntos de
+# nombres**, no un color puntual.
+
+def bloque_de(selector):
+    m = re.search(re.escape(selector) + r"\s*\{(.*?)\}", CSS, re.S)
+    return dict(re.findall(r"(--[\w-]+)\s*:\s*([^;]+);", m.group(1))) if m else {}
+
+
+OSCURO = bloque_de(":root")
+CLARO = bloque_de(':root[data-tema="claro"]')
+af("la hoja define la paleta en tokens", len(OSCURO) >= 20, len(OSCURO))
+af("y el tema claro existe", bool(CLARO), "no encontré :root[data-tema=claro]")
+igual("el claro redefine **todos** los tokens del oscuro, sin olvidarse ninguno",
+      sorted(set(OSCURO) - set(CLARO)), [])
+igual("y no inventa ninguno que el oscuro no tenga",
+      sorted(set(CLARO) - set(OSCURO)), [])
+# Y que sea otro tema de verdad: si los valores fueran los mismos, las cuatro
+# aserciones de arriba pasarían con un «claro» que se ve idéntico al oscuro.
+distintos = [k for k in OSCURO if OSCURO[k].strip() != CLARO.get(k, "").strip()]
+af("y los valores son otros: no es el mismo tema con otro nombre",
+   len(distintos) >= len(OSCURO) - 2, "%d de %d" % (len(distintos), len(OSCURO)))
+af("el claro le avisa al navegador con color-scheme, para las barras y los "
+   "controles nativos", "color-scheme: light" in CSS)
+# Regla 3 en el tema claro: los fondos de estado tienen que seguir siendo
+# distinguibles entre sí. Si el claro los aplastara todos a blanco, «no sé» y
+# «verde» se verían igual — que es la regla 3 rota por la vía de la paleta.
+FONDOS = [v.strip() for k, v in CLARO.items() if k.startswith("--fondo")]
+af("en el claro, los fondos no quedaron todos aplastados en el mismo color",
+   len(set(FONDOS)) >= max(3, len(FONDOS) // 2),
+   "%d distintos de %d" % (len(set(FONDOS)), len(FONDOS)))
+
+# Dos `@keyframes` con el mismo nombre no dan ningún error: gana el último y el
+# otro elemento hereda una animación que no es la suya. Pasó el 2026-08-15 —el
+# punto que late heredó la animación de fondo de la fila que se despierta y
+# salía del color de una tarjeta—, y se encontró mirando el color computado en
+# el navegador, no acá. Ahora sí se encuentra acá.
+nombres = re.findall(r"@keyframes\s+([\w-]+)", CSS)
+repetidos = sorted({n for n in nombres if nombres.count(n) > 1})
+igual("ninguna animación comparte nombre con otra", repetidos, [])
+af("y hay al menos dos animaciones declaradas, si no esto no mira nada",
+   len(nombres) >= 2, nombres)
+
 print("\nASERCIONES: %d\nROJAS: %d" % (ASER, ROJAS))
 sys.exit(1 if ROJAS else 0)

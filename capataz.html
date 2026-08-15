@@ -9,6 +9,141 @@
 <title>capataz</title>
 <style>
 /* ---------------------------------------------------------------------------
+   La paleta, en tokens — y el tema claro
+
+   Hasta el 2026-08-15 los 49 colores estaban escritos a mano adentro de cada
+   regla, así que un tema claro era imposible sin tocar 49 lugares. Ahora cada
+   uno es un token, y el nombre sale de **para qué se usa**: `fondo`, `borde` o
+   `texto`, numerados por luminancia. No es decoración: es lo que permite que la
+   regla 3 —«no sé» nunca verde— se pueda verificar en los dos temas.
+
+   El claro **no se eligió color por color**: se genera dando vuelta la
+   luminosidad y conservando el tono, con dos excepciones escritas. Los acentos
+   —verde, ámbar, rojo, rosa— mantienen su tono y bajan a una luminosidad que se
+   lee sobre blanco: un verde de fondo oscuro puesto tal cual sobre papel es
+   invisible, y ahí el chip de estado dejaría de decir lo que dice.
+
+   Y el tema **no se guarda en el servidor**: capataz no guarda estado propio
+   (regla 1). Vive en el navegador de quien mira, que es de quien es la
+   preferencia.
+--------------------------------------------------------------------------- */
+:root {
+  /* Estas dos NO salen de dar vuelta la luminosidad, y por eso están escritas
+     a mano en los dos temas: son las únicas dos cosas de la pantalla que
+     existen **para llamar la atención** —el latido de quien está trabajando
+     ahora, y la marca de la pestaña que tiene algo—. La inversión automática
+     les bajaba la saturación justo a ellas y sobre papel quedaban invisibles;
+     se vio mirando, no en un arnés. */
+  --latido: #2f9e6b;
+  --marca: #e0a340;
+  --fondo-1: #12141a;
+  --fondo-2: #161922;
+  --fondo-3: #2a1212;
+  --fondo-4: #2b1220;
+  --fondo-5: #12251a;
+  --fondo-6: #1b1e27;
+  --fondo-7: #12232b;
+  --fondo-8: #2e1a10;
+  --fondo-9: #1a1f2b;
+  --fondo-10: #122b22;
+  --fondo-11: #2a2212;
+  --fondo-12: #2b2512;
+  --fondo-13: #1f2532;
+  --fondo-14: #232837;
+  --fondo-15: #14352a;
+  --fondo-16: #262c3b;
+  --fondo-17: #b03434;
+  --fondo-18: #e0a340;
+  --borde-1: #262b38;
+  --borde-2: #2a2f3d;
+  --borde-3: #2f3648;
+  --borde-4: #6b1e4a;
+  --borde-5: #7a2020;
+  --borde-6: #33405c;
+  --borde-7: #3a3f52;
+  --borde-8: #1e4f6b;
+  --borde-9: #245c34;
+  --borde-10: #7a3b1a;
+  --borde-11: #1e6b4f;
+  --borde-12: #6b5a1e;
+  --borde-13: #7a5a1a;
+  --borde-14: #55607a;
+  --borde-15: #2f9e6b;
+  --borde-16: #b8862a;
+  --texto-1: #6b7387;
+  --texto-2: #8b93a7;
+  --texto-3: #8b94a8;
+  --texto-4: #98a2b8;
+  --texto-5: #7fb2ff;
+  --texto-6: #f0b46a;
+  --texto-7: #b9c0d0;
+  --texto-8: #cfd5e4;
+  --texto-9: #a6f0d2;
+  --texto-10: #cfd9ee;
+  --texto-11: #ffc9c9;
+  --texto-12: #b6f0c6;
+  --texto-13: #ffc9e0;
+  --texto-14: #f0dca6;
+  --texto-15: #e6e8ee;
+}
+/* El claro. `color-scheme` le avisa al navegador para que las barras de scroll
+   y los controles nativos acompañen. */
+:root[data-tema="claro"] {
+  color-scheme: light;
+  --latido: #0f7a4a;
+  --marca: #a86a06;
+  --fondo-1: #f6f6f7;
+  --fondo-2: #f3f4f5;
+  --fondo-3: #f4e6e6;
+  --fondo-4: #f4e6ee;
+  --fondo-5: #e7f3ec;
+  --fondo-6: #f1f2f4;
+  --fondo-7: #e6f0f4;
+  --fondo-8: #f6eae5;
+  --fondo-9: #e9ebf2;
+  --fondo-10: #e6f4ef;
+  --fondo-11: #f4f0e6;
+  --fondo-12: #f4f1e6;
+  --fondo-13: #e9ecf1;
+  --fondo-14: #e9ebf1;
+  --fondo-15: #e5f5f0;
+  --fondo-16: #ebecee;
+  --fondo-17: #f7e3e3;
+  --fondo-18: #f7efe3;
+  --borde-1: #d1d3d9;
+  --borde-2: #cfd1d8;
+  --borde-3: #cccfd5;
+  --borde-4: #a72f74;
+  --borde-5: #aa2d2d;
+  --borde-6: #3b599b;
+  --borde-7: #c8cad2;
+  --borde-8: #2f7ca7;
+  --borde-9: #3b9b56;
+  --borde-10: #b15526;
+  --borde-11: #2fa77c;
+  --borde-12: #a78d2f;
+  --borde-13: #b18226;
+  --borde-14: #bbbfc7;
+  --borde-15: #31a570;
+  --borde-16: #ae7f28;
+  --texto-1: #4b505b;
+  --texto-2: #393d46;
+  --texto-3: #393d45;
+  --texto-4: #31343b;
+  --texto-5: #003380;
+  --texto-6: #95590f;
+  --texto-7: #212328;
+  --texto-8: #151e36;
+  --texto-9: #0f593b;
+  --texto-10: #111b30;
+  --texto-11: #360000;
+  --texto-12: #0f491f;
+  --texto-13: #360017;
+  --texto-14: #59450f;
+  --texto-15: #1f2126;
+}
+
+/* ---------------------------------------------------------------------------
    Angosto primero, y sin excepciones.
 
    La medida de referencia es 360 px: lo importante tiene que entrar SIN scroll
@@ -25,7 +160,7 @@
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; max-width: 100%; overflow-x: hidden; }
 body {
-  background: #12141a; color: #e6e8ee;
+  background: var(--fondo-1); color: var(--texto-15);
   font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   /* Sin padding lateral: lo pone `.app`. La barra tiene que llegar de borde a
      borde, y sacarla del padding con un margen negativo dejaba el primer título
@@ -53,8 +188,8 @@ body {
    justo en el dato que dice si creerle al resto de la pantalla.
 --------------------------------------------------------------------------- */
 .shell { position: sticky; top: 0; z-index: 20; display: flex; align-items: center;
-         gap: 8px; padding: 8px 10px; background: #161922;
-         border-bottom: 1px solid #262b38; }
+         gap: 8px; padding: 8px 10px; background: var(--fondo-2);
+         border-bottom: 1px solid var(--borde-1); }
 .app { padding: 10px 10px 0; }
 /* `white-space: nowrap` y `flex: 0 0 auto`: sin los dos, el estado —que es
    texto largo— le come el ancho a la marca y «capataz» sale partido en dos
@@ -63,13 +198,13 @@ body {
    que decide quién cede el ancho es el contenedor. */
 .shell .marca { font: 600 15px/1 -apple-system, BlinkMacSystemFont, sans-serif;
                 letter-spacing: .5px; white-space: nowrap; flex: 0 0 auto; }
-.shell .marca b { color: #7fb2ff; font-weight: 700; }
+.shell .marca b { color: var(--texto-5); font-weight: 700; }
 /* El que cede es el estado, y cede **cortando el renglón de abajo**: la hora y
    la cuenta de proyectos son lo prescindible. La frescura de arriba no se
    corta nunca — es la que dice si creerle al resto de la pantalla. */
 .shell-estado { margin-left: auto; text-align: right; font-size: 10px;
-                color: #8b93a7; line-height: 1.25; min-width: 0; flex: 1 1 auto; }
-.shell-estado .cuando { display: block; color: #6b7387;
+                color: var(--texto-2); line-height: 1.25; min-width: 0; flex: 1 1 auto; }
+.shell-estado .cuando { display: block; color: var(--texto-1);
                         white-space: nowrap; overflow: hidden;
                         text-overflow: ellipsis; }
 
@@ -89,21 +224,21 @@ body {
 nav.principal { display: flex; flex-direction: column; gap: 2px; }
 nav.principal button { display: flex; align-items: center; gap: 8px; width: 100%;
   text-align: left; background: transparent; border: 1px solid transparent;
-  color: #b9c0d0; font: 500 13px/1.2 inherit; padding: 9px 10px;
+  color: var(--texto-7); font: 500 13px/1.2 inherit; padding: 9px 10px;
   border-radius: 8px; cursor: pointer; }
-nav.principal button:hover { background: #1b1e27; }
-nav.principal button[aria-current="page"] { background: #1f2532; color: #e6e8ee;
-  border-color: #33405c; }
+nav.principal button:hover { background: var(--fondo-6); }
+nav.principal button[aria-current="page"] { background: var(--fondo-13); color: var(--texto-15);
+  border-color: var(--borde-6); }
 
 .tabbar-envoltorio { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-  background: #161922; border-top: 1px solid #262b38;
+  background: var(--fondo-2); border-top: 1px solid var(--borde-1);
   padding-bottom: env(safe-area-inset-bottom); }
 .tabbar { display: flex; }
 .tabbar button { flex: 1 1 0; min-width: 0; background: transparent; border: 0;
-  color: #8b93a7; font: 500 10px/1.15 inherit; padding: 7px 2px 8px;
+  color: var(--texto-2); font: 500 10px/1.15 inherit; padding: 7px 2px 8px;
   cursor: pointer; display: flex; flex-direction: column; align-items: center;
   gap: 3px; border-top: 2px solid transparent; }
-.tabbar button[aria-current="page"] { color: #cfd9ee; border-top-color: #7fb2ff; }
+.tabbar button[aria-current="page"] { color: var(--texto-10); border-top-color: var(--texto-5); }
 .tabbar .icono, nav.principal .icono { font-size: 15px; line-height: 1; }
 .tabbar .rotulo { max-width: 100%; overflow: hidden; text-overflow: ellipsis;
                   white-space: nowrap; }
@@ -119,7 +254,7 @@ nav.principal button[aria-current="page"] { background: #1f2532; color: #e6e8ee;
    todas las corridas, y el corolario de la regla 3 dice que un aviso que sale
    siempre enseña a ignorarse. → `pruebas/verificar-pantalla.js` § 10 */
 .marca-vista { display: inline-block; min-width: 7px; height: 7px;
-               border-radius: 99px; background: #e0a340; margin-left: auto; }
+               border-radius: 99px; background: var(--marca); margin-left: auto; }
 .tabbar .marca-vista { position: absolute; transform: translate(14px, -3px);
                        margin: 0; }
 .tabbar button { position: relative; }
@@ -127,16 +262,58 @@ nav.principal button[aria-current="page"] { background: #1f2532; color: #e6e8ee;
 /* Sólo una vista a la vez. `hidden` a secas no alcanza: `display:flex` de
    algunos hijos lo pisa. */
 .vista[hidden] { display: none !important; }
+
+/* El menú de apariencia. Va en la barra y no adentro de una vista: es del
+   aparato de quien mira, no de una sección. */
+.icono-shell { background: transparent; border: 1px solid var(--borde-6);
+  color: var(--texto-8); border-radius: 8px; font-size: 13px; line-height: 1;
+  padding: 6px 8px; cursor: pointer; flex: 0 0 auto; }
+.menu-apariencia { position: absolute; right: 8px; top: 46px; z-index: 40;
+  background: var(--fondo-2); border: 1px solid var(--borde-6);
+  border-radius: 10px; padding: 4px; min-width: 150px; }
+.menu-apariencia button { display: block; width: 100%; text-align: left;
+  background: transparent; border: 0; color: var(--texto-10);
+  font: 500 13px/1.2 inherit; padding: 8px 10px; border-radius: 7px;
+  cursor: pointer; }
+/* Los mismos tokens que la pestaña abierta del lateral: dos menús que
+   marcan lo elegido de dos maneras distintas son dos idiomas en una pantalla. */
+.menu-apariencia button[aria-current="true"] { background: var(--fondo-13);
+  color: var(--texto-15); }
+.menu-apariencia .ayuda { font-size: 11px; color: var(--texto-4);
+  padding: 2px 10px 6px; }
+
+/* El latido: la sesión que escribió hace menos que `latiendo` —10 s, que es el
+   p90 medido— se ve moverse. **No es un estado**: el estado sigue siendo
+   `trabajando`, y por eso el punto late al lado y no reemplaza al chip. Si el
+   latido decidiera el estado, un agente pensando veinte segundos se vería
+   apagado, que es el error que los umbrales medidos evitan.
+   `prefers-reduced-motion` lo apaga: es un adorno, y hay gente a la que un
+   parpadeo permanente le arruina la pantalla. */
+.late { display: inline-block; width: 7px; height: 7px; border-radius: 99px;
+        background: var(--latido); margin-right: 6px;
+        /* El nombre lleva prefijo porque **ya había un `latido`** en esta
+           hoja —el de la fila que se despertó, que anima el fondo— y en CSS
+           gana el último: el punto heredaba esa animación y salía pintado del
+           color de una tarjeta en vez del suyo. No dio ningún error, sólo un
+           color raro. `verificar-angosto.py` § 5 ahora lo vigila. */
+        animation: pulso-late 1.1s ease-in-out infinite; }
+@keyframes pulso-late {
+  0%, 100% { opacity: .25; transform: scale(.75); }
+  50%      { opacity: 1;   transform: scale(1.15); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .late { animation: none; opacity: .9; }
+}
 .vista > h3:first-child { margin-top: 4px; }
 
 h1 { font-size: 17px; margin: 0 0 2px; letter-spacing: .5px; }
 h2 { font-size: 16px; margin: 0 0 2px; }
 h3 { font-size: 12px; margin: 12px 0 5px; text-transform: uppercase;
-     letter-spacing: .8px; color: #8b93a7; font-weight: 600; }
-.tenue { color: #8b93a7; font-size: 12px; }
-.muy-tenue { color: #6b7387; font-size: 11px; }
+     letter-spacing: .8px; color: var(--texto-2); font-weight: 600; }
+.tenue { color: var(--texto-2); font-size: 12px; }
+.muy-tenue { color: var(--texto-1); font-size: 11px; }
 
-.tarjeta { background: #1b1e27; border: 1px solid #2a2f3d; border-radius: 10px;
+.tarjeta { background: var(--fondo-6); border: 1px solid var(--borde-2); border-radius: 10px;
            padding: 12px; margin: 12px 0; }
 
 /* Los números por estado. Envuelven; nunca hacen una fila más ancha que la
@@ -145,31 +322,31 @@ h3 { font-size: 12px; margin: 12px 0 5px; text-transform: uppercase;
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0; }
 .chip { display: inline-flex; align-items: baseline; gap: 5px;
         padding: 4px 8px; border-radius: 7px; font-size: 12px;
-        background: #232837; border: 1px solid #2f3648; }
+        background: var(--fondo-14); border: 1px solid var(--borde-3); }
 /* `nowrap`: el nombre de una herramienta es una palabra sola y partirla al
    medio —«TaskC / reate»— no la hace más corta, la hace ilegible. Se vio
    mirando el teléfono. */
 .chip b { font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .chip.cero { opacity: .45; }
-.e-pendiente  { border-color: #6b5a1e; background: #2b2512; }
-.e-encurso    { border-color: #1e4f6b; background: #12232b; }
-.e-hecho      { border-color: #245c34; background: #12251a; }
-.e-diferido   { border-color: #3a3f52; }
-.e-descartado { border-color: #3a3f52; }
-.e-sinestado  { border-color: #6b1e4a; background: #2b1220; }
-.e-pablo      { border-color: #7a3b1a; background: #2e1a10; }
+.e-pendiente  { border-color: var(--borde-12); background: var(--fondo-12); }
+.e-encurso    { border-color: var(--borde-8); background: var(--fondo-7); }
+.e-hecho      { border-color: var(--borde-9); background: var(--fondo-5); }
+.e-diferido   { border-color: var(--borde-7); }
+.e-descartado { border-color: var(--borde-7); }
+.e-sinestado  { border-color: var(--borde-4); background: var(--fondo-4); }
+.e-pablo      { border-color: var(--borde-10); background: var(--fondo-8); }
 
 /* «No sé» tiene su propia pinta y NO es verde. Regla 3 de CLAUDE.md: un
    tablero que miente en el caso que importa es peor que no tenerlo. */
-.nose { border-style: dashed; border-color: #55607a; background: transparent;
-        color: #98a2b8; }
+.nose { border-style: dashed; border-color: var(--borde-14); background: transparent;
+        color: var(--texto-4); }
 /* El taller. `sin señal` usa la pinta de «no sé» a propósito: terminado y
    colgado no se distinguen desde el disco, así que el chip no puede parecer
    ninguno de los dos. `cerrado` sí es un hecho sabido —el proceso no está—,
    así que es apagado y no punteado. */
-.r-sinsenal { border-style: dashed; border-color: #55607a; background: transparent;
-              color: #98a2b8; }
-.r-cerrado  { border-color: #3a3f52; color: #98a2b8; }
+.r-sinsenal { border-style: dashed; border-color: var(--borde-14); background: transparent;
+              color: var(--texto-4); }
+.r-cerrado  { border-color: var(--borde-7); color: var(--texto-4); }
 
 /* La consola: los agentes background. `esperando` es ámbar y no rojo porque no
    está roto —está trabado esperando a una persona—, y es lo único de esta
@@ -181,55 +358,55 @@ h3 { font-size: 12px; margin: 12px 0 5px; text-transform: uppercase;
    una inconsistencia: de un subagente no hay marca de cierre en disco (T19), y
    de un background el CLI la da. Dos preguntas parecidas con respuestas
    distintas, y la pantalla dice la que corresponde a cada una. */
-.c-esperando  { border-color: #7a5a1a; background: #2a2212; color: #f0dca6; }
-.c-trabajando { border-color: #1e6b4f; background: #122b22; color: #a6f0d2; }
-.c-fallo      { border-color: #7a2020; background: #2a1212; color: #ffc9c9; }
-.c-quieto     { border-color: #3a3f52; color: #98a2b8; }
+.c-esperando  { border-color: var(--borde-13); background: var(--fondo-11); color: var(--texto-14); }
+.c-trabajando { border-color: var(--borde-11); background: var(--fondo-10); color: var(--texto-9); }
+.c-fallo      { border-color: var(--borde-5); background: var(--fondo-3); color: var(--texto-11); }
+.c-quieto     { border-color: var(--borde-7); color: var(--texto-4); }
 .attach { font: 600 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
-          color: #cfd5e4; background: #262c3b; padding: 3px 6px; border-radius: 5px;
+          color: var(--texto-8); background: var(--fondo-16); padding: 3px 6px; border-radius: 5px;
           display: inline-block; margin-top: 4px; }
 /* El desacuerdo entre las dos fuentes. **Casi siempre está vacío**, y ése es el
    punto: si saliera en todas las corridas sería el aviso que enseña a
    ignorarse, y el día que diga algo nadie lo lee (corolario de la regla 3). */
-.desacuerdo { border: 1px solid #6b1e4a; background: #2b1220; border-radius: 9px;
+.desacuerdo { border: 1px solid var(--borde-4); background: var(--fondo-4); border-radius: 9px;
               padding: 9px 10px; margin: 8px 0; font-size: 12px; }
-.desacuerdo b { color: #ffc9e0; }
-.desacuerdo .lado { color: #cfd5e4; margin-top: 3px; }
-.sesion { border: 1px solid #2f3648; border-radius: 9px; padding: 9px 10px;
-          margin: 8px 0; background: #1a1f2b; }
+.desacuerdo b { color: var(--texto-13); }
+.desacuerdo .lado { color: var(--texto-8); margin-top: 3px; }
+.sesion { border: 1px solid var(--borde-3); border-radius: 9px; padding: 9px 10px;
+          margin: 8px 0; background: var(--fondo-9); }
 .sesion .cab { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
 .sesion .cab b { font-size: 15px; }
-.subagente { border-left: 2px solid #2f3648; margin: 7px 0 0 2px;
+.subagente { border-left: 2px solid var(--borde-3); margin: 7px 0 0 2px;
              padding: 0 0 0 9px; }
 .subagente .que { font-size: 13px; }
 /* Suelta y no como descendiente de `.subagente`: la primera versión la escribió
    anidada y el mensaje de una sesión sin subagentes salió en cuerpo grande,
    tapando a las sesiones de abajo. Se vio mirando la pantalla, no el arnés. */
-.porque { font-size: 11px; color: #8b94a8; margin-top: 3px; }
-.rojo  { border-color: #7a2020; background: #2a1212; color: #ffc9c9; }
-.verde { border-color: #245c34; background: #12251a; color: #b6f0c6; }
-.ambar { border-color: #7a5a1a; background: #2a2212; color: #f0dca6; }
+.porque { font-size: 11px; color: var(--texto-3); margin-top: 3px; }
+.rojo  { border-color: var(--borde-5); background: var(--fondo-3); color: var(--texto-11); }
+.verde { border-color: var(--borde-9); background: var(--fondo-5); color: var(--texto-12); }
+.ambar { border-color: var(--borde-13); background: var(--fondo-11); color: var(--texto-14); }
 
 /* Prendido o caído. Los tres colores de un agente, y son tres a propósito:
    «dudoso» es el rato en que capataz no sabe, y pintarlo de cualquiera de los
    otros dos sería afirmar algo. */
-.r-trabajando { border-color: #1e6b4f; background: #122b22; color: #a6f0d2; }
-.r-dudoso     { border-color: #7a5a1a; background: #2a2212; color: #f0dca6; }
-.r-caido      { border-color: #7a2020; background: #2a1212; color: #ffc9c9; }
-.r-integrada  { border-color: #3a3f52; color: #98a2b8; }
-.r-principal  { border-color: #3a3f52; color: #98a2b8; }
-.r-sinrama    { border-style: dashed; border-color: #55607a; color: #98a2b8; }
+.r-trabajando { border-color: var(--borde-11); background: var(--fondo-10); color: var(--texto-9); }
+.r-dudoso     { border-color: var(--borde-13); background: var(--fondo-11); color: var(--texto-14); }
+.r-caido      { border-color: var(--borde-5); background: var(--fondo-3); color: var(--texto-11); }
+.r-integrada  { border-color: var(--borde-7); color: var(--texto-4); }
+.r-principal  { border-color: var(--borde-7); color: var(--texto-4); }
+.r-sinrama    { border-style: dashed; border-color: var(--borde-14); color: var(--texto-4); }
 
 ul { list-style: none; margin: 0; padding: 0; }
-li { padding: 7px 0; border-top: 1px solid #262b38; }
+li { padding: 7px 0; border-top: 1px solid var(--borde-1); }
 li:first-child { border-top: 0; }
 .id { font: 600 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
-      color: #cfd5e4; background: #262c3b; padding: 3px 6px; border-radius: 5px;
+      color: var(--texto-8); background: var(--fondo-16); padding: 3px 6px; border-radius: 5px;
       display: inline-block; margin-right: 6px; }
 .titulo { font-size: 13px; }
-.meta { font-size: 11px; color: #8b93a7; margin-top: 3px; }
-.viejo .meta { color: #f0b46a; }
-.nada { font-size: 12px; color: #6b7387; padding: 6px 0; }
+.meta { font-size: 11px; color: var(--texto-2); margin-top: 3px; }
+.viejo .meta { color: var(--texto-6); }
+.nada { font-size: 12px; color: var(--texto-1); padding: 6px 0; }
 
 /* ---------------------------------------------------------------------------
    La vista primaria: los agentes, no los proyectos.
@@ -238,14 +415,14 @@ li:first-child { border-top: 0; }
    ahora mismo**, y eso no se busca adentro de la tarjeta del proyecto que le
    tocó. Los proyectos siguen abajo: sirven para otra pregunta.
 --------------------------------------------------------------------------- */
-.agente { background: #1b1e27; border: 1px solid #2a2f3d; border-left-width: 4px;
+.agente { background: var(--fondo-6); border: 1px solid var(--borde-2); border-left-width: 4px;
           border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
-.a-trabajando { border-left-color: #2f9e6b; }
-.a-dudoso     { border-left-color: #b8862a; }
-.a-caido      { border-left-color: #b03434; }
-.a-sinrama    { border-left-color: #55607a; }
+.a-trabajando { border-left-color: var(--borde-15); }
+.a-dudoso     { border-left-color: var(--borde-16); }
+.a-caido      { border-left-color: var(--fondo-17); }
+.a-sinrama    { border-left-color: var(--borde-14); }
 .agente .quien { font-size: 16px; font-weight: 600; }
-.agente .donde { font-size: 12px; color: #8b93a7; margin-top: 2px; }
+.agente .donde { font-size: 12px; color: var(--texto-2); margin-top: 2px; }
 
 /* El contador que avanza solo. `tabular-nums` para que no baile de ancho a
    cada segundo, que es lo que hace que un número que corre se lea mal. */
@@ -253,18 +430,18 @@ li:first-child { border-top: 0; }
 
 /* Un agente que se despertó: cambió el sha, no el reloj. Late unos segundos y
    se apaga sola — un resaltado que queda para siempre deja de avisar. */
-.desperto { border-color: #2f9e6b; animation: latido 1.1s ease-out 4; }
-@keyframes latido { from { background: #14352a; } to { background: #1b1e27; } }
-.recien { color: #a6f0d2; font-size: 11px; margin-top: 3px; }
+.desperto { border-color: var(--borde-15); animation: latido 1.1s ease-out 4; }
+@keyframes latido { from { background: var(--fondo-15); } to { background: var(--fondo-6); } }
+.recien { color: var(--texto-9); font-size: 11px; margin-top: 3px; }
 
 /* El pulso del demonio. Si esto no late, la pantalla está congelada y hay que
    verlo de un vistazo: una pantalla en vivo que se murió y sigue mostrando el
    último dato es la misma mentira de la regla 3. */
 .pulso { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
-         background: #2f9e6b; margin-right: 6px; vertical-align: middle;
+         background: var(--borde-15); margin-right: 6px; vertical-align: middle;
          transition: opacity .45s linear; }
 .pulso.apagado { opacity: .15; }
-.pulso.muerto  { background: #b03434; }
+.pulso.muerto  { background: var(--fondo-17); }
 
 /* Datos que ya no se están refrescando: el servidor no contesta. No se ocultan
    —lo último que se supo sigue siendo lo último que se supo— pero no se pueden
@@ -272,8 +449,8 @@ li:first-child { border-top: 0; }
 .sin-contacto .agente { opacity: .55; }
 
 details { margin-top: 6px; }
-summary { font-size: 11px; color: #8b93a7; cursor: pointer; }
-details p { font-size: 11px; color: #8b93a7; margin: 5px 0 0; }
+summary { font-size: 11px; color: var(--texto-2); cursor: pointer; }
+details p { font-size: 11px; color: var(--texto-2); margin: 5px 0 0; }
 .pie { text-align: center; margin-top: 20px; }
 </style>
 </head>
@@ -289,6 +466,9 @@ details p { font-size: 11px; color: #8b93a7; margin: 5px 0 0; }
     <span id="frescura">…</span>
     <span class="cuando" id="cabecera">leyendo…</span>
   </div>
+  <button type="button" class="icono-shell" id="btn-apariencia"
+          aria-label="Apariencia">◐</button>
+  <div class="menu-apariencia" id="menu-apariencia" hidden></div>
 </header>
 
 <div class="app">
@@ -854,7 +1034,15 @@ function pintarTaller() {
   var h = "";
   for (var i = 0; i < t.sesiones.length; i++) {
     var s = t.sesiones[i];
-    h += '<div class="sesion"><div class="cab"><b>' + esc(s.nombre || s.sesion) +
+    /* El latido va **al lado del nombre**, no adentro del chip de estado: no es
+       un estado, es «se está moviendo ahora». Y el umbral lo manda el servidor,
+       como los otros dos. */
+    var late = D && D.umbrales_taller && s.quieto_hace !== null &&
+      s.quieto_hace !== undefined &&
+      haceVivo(s.quieto_hace) < D.umbrales_taller.latiendo;
+    h += '<div class="sesion"><div class="cab">' +
+      (late ? '<span class="late" title="escribiendo ahora"></span>' : '') +
+      '<b>' + esc(s.nombre || s.sesion) +
       '</b><span class="chip ' + (s.viva ? "r-trabajando" : "r-cerrado") + '">' +
       (s.viva ? "prendida" : "el proceso no está") + '</span>' +
       '<span class="chip' + (s.proyecto ? '' : ' nose') + '">' +
@@ -1061,6 +1249,86 @@ function pintarNav() {
   }
 }
 
+/* ---------------------------------------------------------------------------
+   Apariencia: claro, oscuro, o lo que diga el aparato.
+
+   El tema **no se guarda en el servidor**, y no es un detalle: capataz no
+   guarda estado propio (regla 1). La preferencia es de quien mira, así que vive
+   en su navegador. Si no hay `localStorage` —una instantánea abierta con
+   `file://`, un navegador con todo apagado— no se rompe nada: se queda en
+   automático, que es el que no necesita memoria.
+--------------------------------------------------------------------------- */
+var TEMAS = [
+  { clave: "auto", rotulo: "Automático", ayuda: "lo que diga el aparato" },
+  { clave: "claro", rotulo: "Claro" },
+  { clave: "oscuro", rotulo: "Oscuro" }
+];
+var TEMA = "auto";
+
+function leerTema() {
+  try {
+    var v = window.localStorage && window.localStorage.getItem("capataz-tema");
+    for (var i = 0; i < TEMAS.length; i++) if (TEMAS[i].clave === v) return v;
+  } catch (e) { /* sin localStorage se sigue igual */ }
+  return "auto";
+}
+
+function temaEfectivo(clave) {
+  if (clave !== "auto") return clave;
+  /* Sin `matchMedia` se asume oscuro, que es el tema con el que nació esta
+     pantalla: adivinar claro pintaría de blanco a quien no pidió nada. */
+  try {
+    if (window.matchMedia &&
+        window.matchMedia("(prefers-color-scheme: light)").matches) return "claro";
+  } catch (e) { /* nada */ }
+  return "oscuro";
+}
+
+function aplicarTema(clave) {
+  TEMA = clave;
+  var raiz = document.documentElement;
+  if (raiz) {
+    if (temaEfectivo(clave) === "claro") raiz.setAttribute("data-tema", "claro");
+    else raiz.removeAttribute("data-tema");
+  }
+  try {
+    if (window.localStorage) window.localStorage.setItem("capataz-tema", clave);
+  } catch (e) { /* nada */ }
+  pintarApariencia();
+}
+
+function pintarApariencia() {
+  var m = document.getElementById("menu-apariencia");
+  if (!m) return;
+  var h = "";
+  for (var i = 0; i < TEMAS.length; i++) {
+    var t = TEMAS[i];
+    h += '<button type="button" data-tema="' + t.clave + '"' +
+      (t.clave === TEMA ? ' aria-current="true"' : '') + '>' + esc(t.rotulo) +
+      '</button>' +
+      (t.ayuda ? '<div class="ayuda">' + esc(t.ayuda) + '</div>' : '');
+  }
+  m.innerHTML = h;
+  var botones = m.querySelectorAll("button");
+  for (var k = 0; k < botones.length; k++) {
+    botones[k].onclick = (function (clave) {
+      return function () { aplicarTema(clave); m.setAttribute("hidden", ""); };
+    })(botones[k].getAttribute("data-tema"));
+  }
+}
+
+function arrancarApariencia() {
+  aplicarTema(leerTema());
+  var b = document.getElementById("btn-apariencia");
+  var m = document.getElementById("menu-apariencia");
+  if (b && m) {
+    b.onclick = function () {
+      if (m.hasAttribute("hidden")) m.removeAttribute("hidden");
+      else m.setAttribute("hidden", "");
+    };
+  }
+}
+
 function pintar(d) {
   D = d;
   T_RECIBIDO = Date.now();
@@ -1148,6 +1416,10 @@ function arrancarVistas() {
   for (var i = 0; i < VISTAS.length; i++) if (VISTAS[i].clave === pedida) vale = true;
   irA(vale ? pedida : VISTAS[0].clave);
 }
+
+/* La apariencia se aplica **antes** que cualquier dato: si esperara al primer
+   fetch, quien eligió claro vería un destello oscuro en cada carga. */
+arrancarApariencia();
 
 if (window.CAPATAZ_DATOS) {
   /* Instantánea estática: los datos vienen incrustados y no hay a quién

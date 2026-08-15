@@ -92,7 +92,9 @@ function armarPantalla() {
     // como se descubrió que faltaban.
     consola: nodo(), "alcance-consola": nodo(),
     // El shell: los dos lugares donde se dibuja el menú.
-    "nav-principal": nodo(), tabbar: nodo()
+    "nav-principal": nodo(), tabbar: nodo(),
+    // Y el de apariencia. El menú arranca cerrado, como en el marcado.
+    "btn-apariencia": nodo(), "menu-apariencia": nodo({ hidden: "" })
   };
   // Las cuatro vistas, con el `hidden` inicial que tiene el marcado: la primera
   // abierta y las otras tres cerradas. Si acá arrancaran todas visibles, la
@@ -100,11 +102,24 @@ function armarPantalla() {
   const vistas = ["consola", "taller", "agentes", "proyectos"].map((v, i) =>
     nodo(i === 0 ? { "data-vista": v } : { "data-vista": v, hidden: "" }));
   const relojes = [];
+  // `documentElement` es donde vive `data-tema`, y el almacenamiento es de
+  // mentira pero **guarda de verdad**: con uno que no guarda nada, la aserción
+  // de que la preferencia persiste pasaría sin que persistiera.
+  const raiz = nodo();
+  const guardado = {};
   const contexto = {
-    window: {},
+    window: {
+      localStorage: {
+        getItem: (k) => (k in guardado ? guardado[k] : null),
+        setItem: (k, v) => { guardado[k] = String(v); }
+      },
+      // Por defecto el sistema pide oscuro; las pruebas lo cambian.
+      matchMedia: (q) => ({ matches: false, media: q })
+    },
     document: {
       getElementById: (id) => nodos[id],
       querySelectorAll: (sel) => (sel === ".vista" ? vistas : []),
+      documentElement: raiz,
       body: nodo()
     },
     console: console,
@@ -118,7 +133,7 @@ function armarPantalla() {
     setInterval: (fn, ms) => { relojes.push(ms); return relojes.length; }
   };
   contexto.window.CAPATAZ_DATOS = null;
-  return { nodos, contexto, relojes, vistas };
+  return { nodos, contexto, relojes, vistas, raiz, guardado };
 }
 
 const HTML = fs.readFileSync(path.join(RAIZ, "capataz.html"), "utf-8");
@@ -129,13 +144,15 @@ const CODIGO = guiones.join("\n").replace(/<\/?script>/g, "");
 af("y el guión no está vacío", CODIGO.length > 2000, String(CODIGO.length));
 
 function pintarCon(d) {
-  const { nodos, contexto, relojes, vistas } = armarPantalla();
+  const { nodos, contexto, relojes, vistas, raiz, guardado } = armarPantalla();
   contexto.window.CAPATAZ_DATOS = d;
   vm.createContext(contexto);
   vm.runInContext(CODIGO, contexto, { filename: "capataz.html" });
   nodos.relojes = relojes;
   nodos.contexto = contexto;
   nodos.vistas = vistas;
+  nodos.raiz = raiz;
+  nodos.guardado = guardado;
   return nodos;
 }
 
@@ -820,6 +837,97 @@ conSinRama.agentes = [{ quien: "x", proyecto: "P", que: "r", estado: "sin rama",
                         punto: "T1", asunto: "", sha: "" }];
 af("«sin rama» sí marca: es un `en curso` del que no llegó ni un commit",
    pintarCon(conSinRama).tabbar.innerHTML.indexOf("marca-vista") >= 0);
+
+/* -------------------------------------------------------------------------
+   § 11 · Apariencia — claro, oscuro, y lo que diga el aparato
+
+   Lo que hay que verificar no es que el menú se dibuje: es que **la
+   preferencia mande, que se recuerde, y que no romper nada cuando no hay dónde
+   recordarla**. Una instantánea abierta con `file://` no tiene `localStorage`,
+   y ahí la pantalla tiene que seguir andando.
+------------------------------------------------------------------------- */
+console.log("\n§ 11 · Apariencia");
+
+const p11 = pintarCon(datos);
+af("arranca en automático si nadie eligió nada", p11.contexto.TEMA === "auto");
+af("y con el sistema en oscuro, no se marca el tema claro",
+   p11.raiz.getAttribute("data-tema") === null,
+   String(p11.raiz.getAttribute("data-tema")));
+af("el menú ofrece los tres",
+   ["Automático", "Claro", "Oscuro"].every(
+     (r) => p11["menu-apariencia"].innerHTML.indexOf(r) >= 0),
+   p11["menu-apariencia"].innerHTML.slice(0, 160));
+af("y marca cuál está puesto", /aria-current="true"/.test(
+   p11["menu-apariencia"].innerHTML));
+
+p11.contexto.aplicarTema("claro");
+af("elegir claro marca la raíz, que es de donde cuelgan los colores",
+   p11.raiz.getAttribute("data-tema") === "claro",
+   String(p11.raiz.getAttribute("data-tema")));
+af("y la preferencia se recuerda en el navegador, no en el servidor",
+   p11.guardado["capataz-tema"] === "claro",
+   JSON.stringify(p11.guardado));
+p11.contexto.aplicarTema("oscuro");
+af("elegir oscuro la saca", p11.raiz.getAttribute("data-tema") === null,
+   String(p11.raiz.getAttribute("data-tema")));
+
+/* Automático mira al aparato, y hay que probar los dos lados: con uno solo, un
+   `temaEfectivo()` que devolviera siempre lo mismo pasaría igual. */
+p11.contexto.window.matchMedia = (q) => ({ matches: true, media: q });
+p11.contexto.aplicarTema("auto");
+af("en automático, si el aparato pide claro, se pone claro",
+   p11.raiz.getAttribute("data-tema") === "claro");
+p11.contexto.window.matchMedia = (q) => ({ matches: false, media: q });
+p11.contexto.aplicarTema("auto");
+af("y si pide oscuro, oscuro", p11.raiz.getAttribute("data-tema") === null);
+
+/* Sin dónde guardar —una instantánea en `file://`— no se rompe nada. */
+const p11b = pintarCon(datos);
+delete p11b.contexto.window.localStorage;
+delete p11b.contexto.window.matchMedia;
+let exploto = false;
+try { p11b.contexto.aplicarTema("claro"); } catch (e) { exploto = true; }
+af("sin localStorage ni matchMedia la pantalla no se rompe", !exploto);
+af("y el tema elegido igual se aplica",
+   p11b.raiz.getAttribute("data-tema") === "claro");
+
+/* -------------------------------------------------------------------------
+   § 12 · El latido — que se vea cuál está trabajando AHORA
+
+   Pedido de Pablo: «hace 0 s sin escribir significa activo, hace 34 min
+   significa que no está haciendo nada». El umbral no se inventó: es el p90 de
+   los huecos medidos, y **lo manda el servidor** como los otros dos.
+
+   Y late **sin cambiar el estado**: pasado el umbral el agente sigue
+   `trabajando`. Si el latido decidiera el estado, uno pensando veinte segundos
+   se vería apagado — el error que los umbrales medidos evitan.
+------------------------------------------------------------------------- */
+console.log("\n§ 12 · El latido");
+
+af("el servidor manda el umbral del latido, y la pantalla no lo copia",
+   datos.umbrales_taller && typeof datos.umbrales_taller.latiendo === "number",
+   JSON.stringify(datos.umbrales_taller));
+af("y es más chico que el de «trabajando»: es una banda para mirar, no un estado",
+   datos.umbrales_taller.latiendo < datos.umbrales_taller.fresco);
+
+function conLatido(seg) {
+  const s = copia(sesion);
+  s.quieto_hace = seg; s.que = "Bash"; s.sobre = "algo"; s.agentes = [];
+  return pintarCon(conTaller([s])).taller.innerHTML;
+}
+const activa = conLatido(0);
+const dormida = conLatido(34 * 60);
+af("una sesión que escribió recién late", /class="late"/.test(activa),
+   activa.slice(0, 200));
+af("y una de hace 34 minutos no", !/class="late"/.test(dormida));
+/* Los dos lados del umbral exacto, que es lo que verifica que se use el número
+   del servidor y no otro. */
+af("justo debajo del umbral, late",
+   /class="late"/.test(conLatido(datos.umbrales_taller.latiendo - 1)));
+af("justo encima, no",
+   !/class="late"/.test(conLatido(datos.umbrales_taller.latiendo + 1)));
+af("y la que late sigue diciendo que está trabajando: el latido no es un estado",
+   activa.indexOf("r-trabajando") >= 0);
 
 console.log("\nASERCIONES: " + ASER + "\nROJAS: " + ROJAS);
 process.exit(ROJAS ? 1 : 0);

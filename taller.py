@@ -91,6 +91,17 @@ RAIZ = os.environ.get("CAPATAZ_TALLER") or os.path.expanduser("~/.claude")
 FRESCO = 5 * 60           # menos que esto: trabajando
 TIBIO = 30 * 60           # entre los dos: dudoso. Más: caído
 
+# Y un tercero, más chico, que no decide un desenlace: decide si la pantalla
+# **late**. Sale de la misma medición y no de una intuición: sobre los 2830
+# huecos entre líneas, el p90 es de 10 s. O sea que un agente que escribió hace
+# menos de eso está, nueve de cada diez veces, en el medio de algo.
+#
+# Es una banda para mirar, no para afirmar: pasado el umbral el agente sigue
+# `trabajando` —eso no cambió—, sólo se le apaga el latido. La diferencia
+# importa: si `LATIENDO` decidiera un estado, un agente pensando 20 segundos se
+# vería como apagado, que es justo el error que `FRESCO` evita.
+LATIENDO = 10
+
 # Los archivos que se abren son de cientos de bytes. Con este tope, apuntar
 # `CAPATAZ_TALLER` a una carpeta con un archivo enorme no cuelga la pantalla.
 TOPE_BYTES = 64 * 1024

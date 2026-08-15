@@ -1242,3 +1242,76 @@ los imprime. La roja era del arnés; el hallazgo, del código.
 ## El total
 
 **699 aserciones en verde**, cero rojas. Antes de la tanda eran 663.
+
+---
+
+# Tanda 7 · Apariencia, y el latido de quien está trabajando ahora
+
+Dos pedidos de Pablo: **un menú de apariencia con opción claro**, y que el
+taller **muestre de manera más animada cuando está realmente ejecutando cosas**
+—«hace 0 s sin escribir significa activo, hace 34 min significa que no está
+haciendo nada»—.
+
+## El tema claro no se podía hacer, y por qué
+
+Los 49 colores de la hoja estaban escritos a mano adentro de cada regla. Un tema
+claro era tocar 49 lugares y equivocarse en varios. Se convirtieron a tokens con
+un script —a mano son 49 reemplazos— y el nombre de cada uno sale de **para qué
+se usa**, medido sobre la propia hoja: en qué propiedad aparece (`background`,
+`border*`, `color`) y su luminancia dentro del grupo.
+
+El claro **no se eligió color por color**: se genera dando vuelta la luminosidad
+y conservando el tono. Eso es explicable y reproducible, que es más de lo que se
+puede decir de 49 valores elegidos a ojo.
+
+Las dos excepciones están escritas al lado y son las que importan: **el latido y
+la marca de la pestaña**, las únicas dos cosas de la pantalla que existen para
+llamar la atención. La inversión automática les bajaba la saturación justo a
+ellas y sobre papel quedaban invisibles. Se vio mirando, no en un arnés.
+
+Y el tema vive en el navegador de quien mira, **no en el servidor**: es la regla
+1 otra vez. Si no hay `localStorage` —una instantánea abierta con `file://`— no
+se rompe nada y queda en automático, que es el que no necesita memoria.
+
+## El latido, y por qué no es un estado
+
+El umbral salió del mismo estudio que `FRESCO` y `TIBIO`: sobre los 2830 huecos
+medidos, **el p90 es de 10 s**. Un agente que escribió hace menos que eso está,
+nueve de cada diez veces, en el medio de algo.
+
+Lo que cambia respecto de los otros dos es que **`LATIENDO` no decide un
+desenlace**: pasado el umbral el agente sigue `trabajando` y sólo se le apaga el
+punto. La diferencia no es cosmética — si el latido decidiera el estado, un
+agente pensando veinte segundos se vería apagado, que es exactamente el error
+que los umbrales medidos evitan. Por eso el punto late **al lado del nombre** y
+no reemplaza al chip de estado.
+
+Viaja desde el servidor como los otros dos: copiarlo en el HTML serían los
+mismos números en dos lugares.
+
+## El bug que el arnés no podía ver, con todo en verde
+
+Con las 726 en verde, el punto que late salía de un color pálido raro. La
+medición: el token decía `#0f7a4a` y el color computado era `rgb(229,245,240)`.
+La causa, después de mirar el árbol de estilos en el navegador: **había dos
+`@keyframes latido`**. El otro ya existía —anima el fondo de la fila que se
+despierta— y en CSS gana el último, así que mi punto heredaba una animación de
+fondo ajena.
+
+No dio ningún error. Es el mismo bug de forma que las dos `function pintar(d)`
+del T35: dos cosas con el mismo nombre y ninguna regla sobre cuál gana, adentro
+del proyecto que tiene eso escrito como regla 1. Se renombró, y ahora
+`verificar-angosto.py` § 5 se pone rojo si dos animaciones comparten nombre.
+
+## Lo que se vio rojo
+
+Cinco bugs, cada uno revertido y confirmado con `diff -q`: el tema que no se
+guarda; el automático que ignora al aparato; el latido con umbral propio en vez
+del que manda el servidor (2 rojas); un token que el bloque claro se olvida; y
+las dos animaciones con el mismo nombre.
+
+## El total
+
+**729 aserciones en verde**, cero rojas. Antes de la tanda eran 699. Las tres
+de diferencia con las 726 que dio antes de escribir este capítulo son las tres
+filas nuevas del seguimiento — el T8 otra vez.

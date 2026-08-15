@@ -137,7 +137,8 @@ def estado():
             # Viajan igual que los otros —una vez y desde acá— para que la
             # pantalla no los copie.
             "taller": vista_taller,
-            "umbrales_taller": {"fresco": taller.FRESCO, "tibio": taller.TIBIO},
+            "umbrales_taller": {"fresco": taller.FRESCO, "tibio": taller.TIBIO,
+                                "latiendo": taller.LATIENDO},
             "consola": vista_consola,
             "refresco_nube": nube.REFRESCO,
             "proyectos": vistas,
