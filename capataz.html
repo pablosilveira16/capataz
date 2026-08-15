@@ -146,7 +146,10 @@ h3 { font-size: 12px; margin: 12px 0 5px; text-transform: uppercase;
 .chip { display: inline-flex; align-items: baseline; gap: 5px;
         padding: 4px 8px; border-radius: 7px; font-size: 12px;
         background: #232837; border: 1px solid #2f3648; }
-.chip b { font-size: 15px; font-variant-numeric: tabular-nums; }
+/* `nowrap`: el nombre de una herramienta es una palabra sola y partirla al
+   medio —«TaskC / reate»— no la hace más corta, la hace ilegible. Se vio
+   mirando el teléfono. */
+.chip b { font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .chip.cero { opacity: .45; }
 .e-pendiente  { border-color: #6b5a1e; background: #2b2512; }
 .e-encurso    { border-color: #1e4f6b; background: #12232b; }
@@ -817,6 +820,8 @@ function filaSubagente(a) {
     '<span class="chip chip-taller ' + (CLASE_TALLER[e] || "nose") + '">' +
     esc(e) + '</span>' +
     '<span class="chip">' + esc(a.tipo) + '</span>' +
+    (a.que ? '<span class="chip"><b>' + esc(a.que) + '</b>' +
+      (a.sobre ? esc(a.sobre) : '') + '</span>' : '') +
     '<span class="chip"><b class="reloj-taller">' + esc(hace(seg)) +
     '</b>escribió</span>' +
     (a.modelo ? '<span class="chip">' + esc(a.modelo) + '</span>' : '') +
@@ -854,7 +859,18 @@ function pintarTaller() {
       (s.viva ? "prendida" : "el proceso no está") + '</span>' +
       '<span class="chip' + (s.proyecto ? '' : ' nose') + '">' +
       esc(s.proyecto || "carpeta que capataz no vigila") + '</span></div>' +
-      '<div class="tenue">' + esc(s.cwd) + '</div>';
+      '<div class="tenue">' + esc(s.cwd) + '</div>' +
+      /* Qué está haciendo, que sale de la cola de su transcripción. Si no se
+         sabe se dice el motivo y **no** se pone nada en su lugar: una sesión
+         que está pensando y una cuya transcripción no aparece son cosas
+         distintas. */
+      (s.que
+        ? '<div class="chips"><span class="chip"><b>' + esc(s.que) + '</b>' +
+          (s.sobre ? esc(s.sobre) : '') + '</span>' +
+          (s.quieto_hace === null || s.quieto_hace === undefined ? '' :
+            '<span class="chip">' + esc(hace(s.quieto_hace)) +
+            ' sin escribir</span>') + '</div>'
+        : '<div class="porque">' + esc(s.motivo_que || "") + '</div>');
     if (!s.agentes.length) {
       h += '<div class="porque">' + esc(s.motivo_sin_agentes ||
         "sin subagentes") + '</div>';
@@ -1063,11 +1079,18 @@ function pintar(d) {
   /* Con la misma disciplina: se repinta sólo si cambió. Un subagente que
      escribe cada dos segundos cambiaría el mtime todo el tiempo, así que la
      firma ignora el reloj y mira quién está y en qué estado. */
+  /* `que` y `sobre` van adentro de la firma, y eso costó un bug: sin ellos, una
+     sesión que pasa de `Bash` a `Edit` **no se repinta nunca** —quién está y en
+     qué estado no cambió—, así que la pantalla en vivo mostraba lo que el
+     agente hacía hace media hora. Se vio mirando el navegador: forzar
+     `pintarTaller()` a mano lo dibujaba bien. Sigue sin mirar el reloj: el
+     `mtime` cambia cada dos segundos y eso haría parpadear la sección entera. */
   var firmaT = JSON.stringify((d.taller && d.taller.sesiones || []).map(
     function (s) {
-      return [s.sesion, s.viva, s.proyecto, (s.agentes || []).map(function f(a) {
-        return [a.id, a.estado, (a.hijos || []).map(f)];
-      })];
+      return [s.sesion, s.viva, s.proyecto, s.que, s.sobre,
+        (s.agentes || []).map(function f(a) {
+          return [a.id, a.estado, a.que, a.sobre, (a.hijos || []).map(f)];
+        })];
     })) + "|" + ((d.taller && d.taller.ok) ? "ok" : (d.taller && d.taller.error));
   if (firmaT !== FIRMA_TALLER) { FIRMA_TALLER = firmaT; pintarTaller(); }
 

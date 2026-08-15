@@ -177,8 +177,27 @@ try:
         return getattr(f, "id", "?")
 
     nombres = [nombre_de(n) for n in llamadas]
-    igual("el único io.open de taller.py está adentro de _abrir()",
-          nombres.count("io.open"), 1)
+    # **Dos, y se sabe cuál es cada uno.** Hasta el 2026-08-15 era uno solo:
+    # `_abrir`, que lee los `.json` chicos. El segundo es `_cola`, que abre la
+    # transcripción y lee sólo los últimos bytes. Que sean funciones distintas
+    # —y que el arnés cuente exactamente dos— es lo que permite decir en una
+    # línea qué abre cada una; con los dos adentro de la misma, «capataz lee la
+    # cola y nada más» sería un comentario en vez de una afirmación.
+    igual("taller.py abre archivos en exactamente dos lugares",
+          nombres.count("io.open"), 2)
+    funciones = {n.name: n for n in ast.walk(arbol)
+                 if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    for cual in ("_abrir", "_cola"):
+        af("«%s» existe" % cual, cual in funciones)
+        adentro = [nombre_de(n) for n in ast.walk(funciones[cual])
+                   if isinstance(n, ast.Call)]
+        igual("y %s abre exactamente uno" % cual, adentro.count("io.open"), 1)
+    # Y que la cola sea cola: un `seek` y una lectura acotada. Sin esto, `_cola`
+    # podría leer una transcripción de 13 MB entera y el arnés no se enteraría.
+    cuerpo_cola = [nombre_de(n) for n in ast.walk(funciones["_cola"])
+                   if isinstance(n, ast.Call)]
+    af("_cola se posiciona con seek en vez de leer el archivo entero",
+       "f.seek" in cuerpo_cola, cuerpo_cola)
     prohibidas = [n for n in nombres if n in (
         "subprocess.run", "subprocess.Popen", "subprocess.call",
         "subprocess.check_output", "os.system", "os.popen", "eval", "exec")]
@@ -366,6 +385,145 @@ try:
     af("un meta corrupto no tumba la lectura de los demás",
        len(roto["sesiones"]) == 2 and len(roto["sesiones"][0]["agentes"]) >= 1,
        [len(s["agentes"]) for s in roto["sesiones"]])
+
+    # -----------------------------------------------------------------------
+    print("§ 7 · Qué está haciendo — y lo que NO puede salir de la cola")
+    # -----------------------------------------------------------------------
+    #
+    # Desde el 2026-08-15 este módulo abre la transcripción, que es lo que hasta
+    # ese día prometía no hacer. La promesa no se borró: se hizo más chica —sólo
+    # la cola, y sólo la lista blanca— y esta sección es lo que la sostiene.
+    #
+    # La aserción que vale es el **señuelo**: se planta una transcripción con un
+    # secreto adentro del `command` de un Bash y se exige que no aparezca en
+    # ninguna parte de lo que capataz devuelve. Una lista blanca que no se
+    # ejercita con algo que tiene que quedar afuera no es una lista blanca.
+
+    SECRETO = "ghp" + "_" + "S3CRET" + "0" * 30
+    TEXTO_PRIVADO = "el contenido del archivo que el agente leyó"
+    # **El señuelo que de verdad prueba la lista blanca.** El de arriba tiene
+    # forma de token, así que si se escapara lo taparía `limpiar_secreto` y la
+    # aserción pasaría **igual con el `command` adentro de la lista blanca** —se
+    # midió: puesto ese bug, el secreto salía como «token» y sólo se caía otra
+    # aserción—. Éste no tiene forma de nada: si aparece, es porque el `command`
+    # salió, y no hay red que lo ataje.
+    CANARIO = "canario-que-viaja-adentro-del-command"
+    cola = os.path.join(VIVOS, "agent-aaaa1.jsonl")
+    with io.open(cola, "w", encoding="utf-8") as f:
+        f.write(json.dumps({"type": "assistant", "message": {"role": "assistant",
+                "content": [{"type": "text", "text": TEXTO_PRIVADO}]}}) + "\n")
+        f.write(json.dumps({"type": "assistant", "message": {"role": "assistant",
+                "content": [{"type": "tool_use", "name": "Bash",
+                             "input": {"command": "curl %s -H 'token: %s'"
+                                                  % (CANARIO, SECRETO),
+                                       "description": "Desplegar a QAS"}}]}}) + "\n")
+        f.write(json.dumps({"type": "user", "message": {"role": "user",
+                "content": [{"type": "tool_result", "content": TEXTO_PRIVADO}]}}) + "\n")
+
+    que, sobre, motivo = taller.que_hace(cola, FALSO)
+    igual("dice qué herramienta usó", que, "Bash")
+    igual("y sobre qué, con la descripción escrita para una persona",
+          sobre, "Desplegar a QAS")
+    todo = json.dumps([que, sobre, motivo], ensure_ascii=False)
+    af("el `command` del Bash NO sale — el canario que viajaba adentro no aparece",
+       CANARIO not in todo, todo[:120])
+    af("ni el secreto que tenía", SECRETO not in todo, todo[:120])
+    af("y el texto de los mensajes tampoco", TEXTO_PRIVADO not in todo, todo[:120])
+    # Y lo mismo sobre la vista entera, que es lo que viaja a la pantalla: si un
+    # campo nuevo lo arrastrara sin querer, acá se ve.
+    vista_json = json.dumps(taller.leer(FALSO, HOY), ensure_ascii=False, default=str)
+    af("ni por la vista entera se escapa el secreto", SECRETO not in vista_json)
+    af("ni el contenido de un tool_result", TEXTO_PRIVADO not in vista_json)
+
+    # La ruta sale como **basename**: ni la carpeta ni la ruta entera.
+    con_ruta = os.path.join(VIVOS, "agent-aaaa2.jsonl")
+    with io.open(con_ruta, "w", encoding="utf-8") as f:
+        f.write(json.dumps({"type": "assistant", "message": {"role": "assistant",
+                "content": [{"type": "tool_use", "name": "Edit",
+                             "input": {"file_path": "/Users/secreta/Proyectos/x/lector.py",
+                                       "old_string": TEXTO_PRIVADO}}]}}) + "\n")
+    que2, sobre2, _ = taller.que_hace(con_ruta, FALSO)
+    igual("de una ruta sale sólo el nombre del archivo", (que2, sobre2),
+          ("Edit", "lector.py"))
+    af("el `old_string` de un Edit no sale",
+       TEXTO_PRIVADO not in json.dumps([que2, sobre2]))
+
+    # Sin herramientas en la cola no se inventa nada: es la regla 3 en chico.
+    pensando = os.path.join(VIVOS, "agent-aaaa3.jsonl")
+    with io.open(pensando, "w", encoding="utf-8") as f:
+        f.write(json.dumps({"type": "assistant", "message": {"role": "assistant",
+                "content": [{"type": "text", "text": "pensando"}]}}) + "\n")
+    q3, s3, m3 = taller.que_hace(pensando, FALSO)
+    igual("sin ninguna herramienta en la cola, no se afirma nada", (q3, s3), ("", ""))
+    af("y el motivo dice que puede estar pensando", "pensando" in m3, m3)
+
+    # La cola es cola: un archivo grande no se lee entero, y lo viejo no llega.
+    grande = os.path.join(VIVOS, "agent-aaaa4.jsonl")
+    with io.open(grande, "w", encoding="utf-8") as f:
+        f.write(json.dumps({"type": "assistant", "message": {"role": "assistant",
+                "content": [{"type": "tool_use", "name": "HerramientaVieja",
+                             "input": {"description": "esto quedó muy atrás"}}]}}) + "\n")
+        f.write(" " * (taller.COLA_BYTES * 2) + "\n")
+        f.write(json.dumps({"type": "assistant", "message": {"role": "assistant",
+                "content": [{"type": "tool_use", "name": "HerramientaNueva",
+                             "input": {"description": "lo último"}}]}}) + "\n")
+    q4, _s4, _m4 = taller.que_hace(grande, FALSO)
+    igual("de un archivo grande sale lo último, no lo primero",
+          q4, "HerramientaNueva")
+    af("y el archivo pesa más que la cola, así que no se leyó entero",
+       os.path.getsize(grande) > taller.COLA_BYTES * 2)
+
+    # **Dos herramientas adentro de la MISMA cola**, que es lo que verifica que
+    # se camine para atrás. La de arriba no lo hacía: la vieja quedaba fuera de
+    # los 64 KB, así que caminar para adelante o para atrás daba lo mismo y la
+    # aserción pasaba con el bug puesto. Se midió.
+    dos = os.path.join(VIVOS, "agent-aaaa5.jsonl")
+    with io.open(dos, "w", encoding="utf-8") as f:
+        for nombre in ("Primera", "Segunda"):
+            f.write(json.dumps({"type": "assistant", "message": {"role": "assistant",
+                    "content": [{"type": "tool_use", "name": nombre,
+                                 "input": {"description": nombre}}]}}) + "\n")
+    q5, _s5, _m5 = taller.que_hace(dos, FALSO)
+    igual("con dos herramientas en la misma cola, se devuelve la última", q5, "Segunda")
+
+    # La compuerta de `_cola`: la misma carpeta, y sólo `.jsonl`.
+    for malo, porque in ((os.path.join(RAIZ, "lector.py"), "está fuera del taller"),
+                         (os.path.join(VIVOS, "agent-aaaa1.meta.json"), "no es .jsonl")):
+        try:
+            taller._cola(malo, FALSO)
+            af("_cola tendría que rechazar %s (%s)" % (malo, porque), False)
+        except taller.FueraDelTaller:
+            af("_cola rechaza lo que %s" % porque, True)
+
+    # Contra las transcripciones **de verdad** de esta máquina, que es la lección
+    # que dejó `nube.py`: un lector probado sólo contra archivos que él mismo
+    # escribió pasa entero con el formato real cambiado.
+    real = taller.leer()
+    con_que = [s for s in real["sesiones"] if s.get("que")]
+    af("y al menos una sesión de verdad dice qué está haciendo",
+       len(con_que) >= 1,
+       "ninguna de %d: si el formato del .jsonl cambió, esto no verifica nada"
+       % len(real["sesiones"]))
+    af("lo que dice es un nombre de herramienta, no una frase",
+       all(" " not in s["que"] for s in con_que), [s["que"] for s in con_que])
+    # El nombre de una herramienta MCP se corta por el separador. Sin esto el
+    # chip mide media pantalla de teléfono: se vio mirando, con este nombre.
+    igual("una herramienta MCP se muestra por su nombre útil",
+          taller._nombre_corto("mcp__Claude_Browser__javascript_tool"),
+          "javascript_tool")
+    igual("y una que no es MCP no se toca", taller._nombre_corto("Bash"), "Bash")
+    # El texto de otro agente viene con markdown, y en una pantalla sale
+    # literal: es la misma marca que ya tienen los alcances de los dos módulos.
+    igual("los backticks y asteriscos no llegan a la pantalla",
+          taller._para_pantalla("declara `conductividad` en **dS**"),
+          "declara conductividad en dS")
+    largo = taller._para_pantalla("palabra " * 40)
+    af("un texto largo se corta con puntos suspensivos",
+       largo.endswith("…") and len(largo) <= taller.TOPE_QUE_HACE + 1, largo)
+    af("y se corta en un espacio, no en el medio de una palabra",
+       "palabr…" not in largo, largo)
+    af("ninguna de las de verdad pasa de 40 caracteres",
+       all(len(s["que"]) <= 40 for s in con_que), [s["que"] for s in con_que])
 
 finally:
     shutil.rmtree(FALSO, ignore_errors=True)

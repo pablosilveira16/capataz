@@ -596,6 +596,41 @@ af("y cero sesiones es otra cosa: se dice que no hay ninguna abierta",
 af("y avisa que los de otra máquina no se ven acá",
    p8d.taller.innerHTML.indexOf("otra máquina") >= 0);
 
+/* Qué está haciendo cada uno, dibujado. La sesión de arriba no trae `que`, así
+   que sirve para el caso «no se sabe»: tiene que salir el motivo y NO un hueco
+   ni un invento. */
+const conQue = copia(sesion);
+conQue.que = "Bash"; conQue.sobre = "Desplegar a QAS"; conQue.quieto_hace = 12;
+conQue.agentes = [agente("padre", "trabajando", 3)];
+conQue.agentes[0].que = "Edit"; conQue.agentes[0].sobre = "lector.py";
+const htmlQ = pintarCon(conTaller([conQue])).taller.innerHTML;
+af("la sesión dice qué herramienta está usando y sobre qué",
+   htmlQ.indexOf("Bash") >= 0 && htmlQ.indexOf("Desplegar a QAS") >= 0);
+af("y hace cuánto que no escribe", htmlQ.indexOf("sin escribir") >= 0);
+af("el subagente también dice qué hace",
+   htmlQ.indexOf("Edit") >= 0 && htmlQ.indexOf("lector.py") >= 0);
+/* **Que un cambio de herramienta repinte.** Es la aserción que nació de un bug
+   de verdad: la firma que decide si vale la pena redibujar miraba quién está y
+   en qué estado, no qué hace — así que una sesión que pasaba de `Bash` a `Edit`
+   se quedaba mostrando lo de antes para siempre. Se pinta dos veces sobre el
+   MISMO contexto, que es lo que hace el navegador. */
+const pDoble = pintarCon(conTaller([conQue]));
+const segundo = copia(conQue);
+segundo.que = "Edit"; segundo.sobre = "nube.py";
+pDoble.contexto.pintar(conTaller([segundo]));
+af("cambiar de herramienta repinta la sección: no se queda con la de antes",
+   pDoble.taller.innerHTML.indexOf("nube.py") >= 0 &&
+   pDoble.taller.innerHTML.indexOf("Desplegar a QAS") < 0,
+   pDoble.taller.innerHTML.slice(0, 220));
+
+const sinQue = copia(sesion);
+sinQue.que = ""; sinQue.sobre = "";
+sinQue.motivo_que = "escribió recién pero no hay ninguna herramienta en la cola";
+const htmlSQ = pintarCon(conTaller([sinQue])).taller.innerHTML;
+af("y si no se sabe qué hace, se dice el motivo y no se inventa nada",
+   htmlSQ.indexOf("no hay ninguna herramienta") >= 0 &&
+   htmlSQ.indexOf("sin escribir") < 0, htmlSQ.slice(0, 160));
+
 /* -------------------------------------------------------------------------
    § 9 · La consola — los agentes background, dibujados
 

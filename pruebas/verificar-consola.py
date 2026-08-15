@@ -268,8 +268,27 @@ if CLAUDE:
     # dos fuentes mirando las mismas sesiones interactivas vivas.
     VT = taller.leer()
     DES = consola.cotejar(VISTA, VT)
-    af("cotejar contra el taller real no inventa desacuerdos", DES == [],
-       "salieron: %s" % json.dumps(DES, ensure_ascii=False))
+    # **No se exige que la lista esté vacía**, y eso costó una roja para
+    # entenderlo: el 2026-08-15 la máquina tenía un desacuerdo de verdad — un
+    # background con `state: blocked` que el CLI sigue listando **sin `pid`**,
+    # o sea con el proceso muerto y el registro viejo (T37). Exigir cero acá es
+    # pedirle a un arnés que la máquina no tenga nunca nada raro, y el día que
+    # lo tenga la roja es del arnés y no del código.
+    #
+    # Lo que sí se exige es que **ninguno sea de los dos que están declarados
+    # como falsos positivos**: el alias `bg`/`background` y un background
+    # terminado sin archivo. Ésos son los que harían salir el aviso siempre.
+    DECLARADOS = [d for d in DES if d["que"] == "la clase de sesión no coincide"
+              or (d["que"] == "la consola la ve y el taller no"
+                  and "background · " in d["consola"]
+                  and d["sesion"] in [b["sesion"] for b in VISTA["background"]
+                                      if b["estado"] in ("terminado", "falló",
+                                                         "parado")])]
+    igual("cotejar no inventa ninguno de los dos desacuerdos declarados",
+          DECLARADOS, [])
+    if DES:
+        print("       (la máquina tiene %d desacuerdo(s) de verdad: %s)"
+              % (len(DES), ", ".join(d["que"] for d in DES)))
     af("y el taller ve las mismas sesiones que la consola",
        len(VT.get("sesiones", [])) >= 1)
     # Ésta es la que prueba que el alias no es decorativo: si el taller y el CLI

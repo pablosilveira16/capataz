@@ -35,11 +35,25 @@ De `~/.claude` se leen **dos clases de archivo, las dos diminutas**:
     projects/<proy>/<sesión>/subagents/
         agent-<id>.meta.json                    ~130 bytes, y **es el árbol**
 
-De la transcripción `agent-<id>.jsonl` se toca **sólo `os.stat`**: el `mtime` es
-el último latido y alcanza. Nunca se abre. No es una optimización: una
-transcripción es todo lo que el agente leyó —archivos, errores, lo que sea— y un
-tablero que la abre es un tablero que puede mostrarla. Medido el 2026-08-06:
-entre 33 KB y 1,1 MB por agente.
+Y desde el 2026-08-15, **la cola de la transcripción**: los últimos 64 KB, y
+nada más. Hasta ese día este módulo prometía no abrirla nunca, con este motivo
+escrito: una transcripción es todo lo que el agente leyó —archivos, errores, lo
+que sea— y un tablero que la abre es un tablero que puede mostrarla.
+
+El motivo sigue siendo cierto, así que la promesa **no se borró: se hizo más
+chica y más verificable**. Pablo pidió ver *qué* está haciendo cada agente y no
+sólo *si* trabaja, y eso está en un solo lugar. Lo que la sostiene ahora:
+
+    · se leen los últimos COLA_BYTES y nunca el archivo entero — hay
+      transcripciones de 13 MB en esta máquina;
+    · de cada evento se saca lo que está en una **lista blanca**: el nombre de
+      la herramienta, su `description` —que ya está escrita para un humano— y el
+      **basename** de la ruta sobre la que trabaja;
+    · **nunca** el `command` de un Bash, el texto de un mensaje, ni un
+      `old_string`. Y es lista blanca y no lista negra a propósito: una lista de
+      lo prohibido es por donde se escapa el primer secreto.
+
+El `mtime` sigue siendo el latido —eso no cambió— y sigue costando un `os.stat`.
 
 ## Los umbrales salen de una medición, no de una intuición
 
@@ -174,6 +188,155 @@ def _abrir(ruta, raiz=None):
         return None, limpiar_secreto("no pude leer %s: %s" % (ruta, e))
 
 
+# ----------------------------------------------------------------------------
+# 1b · Qué está haciendo — la cola de la transcripción, y sólo la lista blanca
+# ----------------------------------------------------------------------------
+#
+# Medido el 2026-08-15 sobre las transcripciones de esta máquina: en 64 KB
+# entran 27 eventos, de sobra para encontrar la última herramienta usada. Los
+# archivos van de 33 KB a 13 MB, así que leer la cola es lo que hace que esto
+# cueste lo mismo con un agente que recién arranca y con uno de todo el día.
+COLA_BYTES = 64 * 1024
+
+# **Lista blanca, y por eso es una tupla y no un `if`.** De la entrada de una
+# herramienta sale el basename de una de estas claves y nada más. El `command`
+# de un Bash y el texto de un mensaje no están, y no se agregan: lo que se
+# muestra en un tablero es lo que se puede filtrar a la pantalla de al lado.
+CAMPOS_RUTA = ("file_path", "notebook_path", "path")
+
+# El `description` de una herramienta lo escribe el modelo para que lo lea una
+# persona —«List files in current directory»—, igual que el `description` de un
+# subagente que este módulo ya muestra. Se limpia y se corta como cualquier
+# texto de afuera.
+TOPE_QUE_HACE = 70
+
+MOTIVO_SIN_COLA = (
+    "escribió recién pero en los últimos %d KB de su transcripción no hay "
+    "ninguna herramienta: puede estar pensando o escribiendo la respuesta")
+
+
+def _cola(ruta, raiz=None):
+    """Los últimos `COLA_BYTES` de una transcripción, en eventos ya parseados.
+
+    **Este es el segundo y último `io.open` del módulo**, y el arnés cuenta los
+    dos: uno abre `.json` y éste abre `.jsonl`, sin leerlo entero. La compuerta
+    de carpeta es la misma —lo que se abra está adentro del taller—; lo que
+    cambia es la extensión, y por eso está acá y no adentro de `_abrir`: que las
+    dos clases de archivo se abran en dos funciones distintas es lo que permite
+    decir en una línea qué hace cada una.
+    """
+    base = raiz or RAIZ
+    if not _dentro(ruta, base):
+        raise FueraDelTaller(
+            "«%s» está fuera de %s. Capataz no abre archivos de nadie afuera "
+            "del taller." % (ruta, base))
+    if not ruta.endswith(".jsonl"):
+        raise FueraDelTaller(
+            "«%s» no es una transcripción .jsonl." % ruta)
+    try:
+        tam = os.path.getsize(ruta)
+        with io.open(ruta, "rb") as f:
+            f.seek(max(0, tam - COLA_BYTES))
+            crudo = f.read(COLA_BYTES)
+    except OSError:
+        return []
+    lineas = crudo.decode("utf-8", "replace").splitlines()
+    # La primera línea de la cola casi siempre está cortada por la mitad: se
+    # tira. Sólo se conserva entera cuando el archivo entra en la cola.
+    if tam > COLA_BYTES and lineas:
+        lineas = lineas[1:]
+    eventos = []
+    for l in lineas:
+        try:
+            d = json.loads(l)
+        except ValueError:
+            continue            # una línea partida no es un error: es la cola
+        if isinstance(d, dict):
+            eventos.append(d)
+    return eventos
+
+
+def _nombre_corto(nombre):
+    """`mcp__Claude_Browser__javascript_tool` → `javascript_tool`.
+
+    Las herramientas de un servidor MCP llegan con el servidor adelante y el
+    nombre útil al final. Sin esto el chip mide media pantalla de teléfono y
+    empuja lo de al lado a dos renglones — se vio mirando, con este mismo nombre
+    de ejemplo. Se corta por el separador, no por largo: cortar por largo deja
+    `mcp__Claude_Browser__javascr…`, que no dice nada.
+    """
+    if nombre.startswith("mcp__") and "__" in nombre[5:]:
+        return nombre.rsplit("__", 1)[-1] or nombre
+    return nombre
+
+
+def _de_la_lista_blanca(bloque):
+    """De un `tool_use`, lo único que se deja salir. Devuelve `(que, sobre)`."""
+    nombre = _nombre_corto(limpiar_secreto(str(bloque.get("name") or ""))[:60])[:40]
+    entrada = bloque.get("input")
+    entrada = entrada if isinstance(entrada, dict) else {}
+    sobre = ""
+    for clave in CAMPOS_RUTA:
+        valor = entrada.get(clave)
+        if isinstance(valor, str) and valor:
+            # El **basename**, no la ruta: la carpeta ya se muestra arriba y una
+            # ruta entera ocupa tres renglones de teléfono.
+            sobre = os.path.basename(valor)
+            break
+    if not sobre:
+        d = entrada.get("description")
+        if isinstance(d, str):
+            sobre = d
+    return nombre, _para_pantalla(sobre)
+
+
+def _para_pantalla(texto):
+    """Texto de otro agente, listo para dibujar. Sin markdown y cortado.
+
+    Lo que llega acá lo escribió otro agente para que lo lea una persona, y
+    viene con backticks y asteriscos: **en una pantalla salen literales**, que
+    es la misma marca que ya tienen `taller.ALCANCE` y `consola.ALCANCE`. Se
+    sacan los dos y se corta en un espacio, no en el medio de una palabra —
+    cortar al bruto dejaba cosas como «la magnitud conductividad en **dS».
+    """
+    t = limpiar_secreto(texto or "").replace("`", "").replace("*", "")
+    t = " ".join(t.split())
+    if len(t) <= TOPE_QUE_HACE:
+        return t
+    corte = t[:TOPE_QUE_HACE]
+    espacio = corte.rfind(" ")
+    return (corte[:espacio] if espacio > TOPE_QUE_HACE // 2 else corte) + "…"
+
+
+def que_hace(transcripcion, raiz=None):
+    """La última herramienta que usó ese agente. `(que, sobre, error)`.
+
+    Se camina la cola **de atrás para adelante** y se corta en el primer
+    `tool_use`: es lo último que hizo. Si en toda la cola no hay ninguno, no se
+    inventa nada —se dice que puede estar pensando—, que es la regla 3 en el
+    caso más chico del tablero.
+    """
+    try:
+        eventos = _cola(transcripcion, raiz)
+    except FueraDelTaller:
+        raise
+    except OSError:
+        return "", "", "no pude leer la cola de la transcripción"
+    for d in reversed(eventos):
+        mensaje = d.get("message")
+        if not isinstance(mensaje, dict):
+            continue
+        contenido = mensaje.get("content")
+        if not isinstance(contenido, list):
+            continue
+        for bloque in reversed(contenido):
+            if isinstance(bloque, dict) and bloque.get("type") == "tool_use":
+                que, sobre = _de_la_lista_blanca(bloque)
+                if que:
+                    return que, sobre, ""
+    return "", "", MOTIVO_SIN_COLA % (COLA_BYTES // 1024)
+
+
 def _vive(pid):
     """Si el proceso existe. `None` cuando no se puede saber.
 
@@ -236,7 +399,26 @@ def sesiones(raiz=None, ahora=None):
             continue
         pid = d.get("pid")
         arrancada = d.get("startedAt")
+        # La transcripción de la sesión misma vive al lado de las de sus
+        # subagentes, con el nombre del `sessionId`. Hasta hoy no se miraba, así
+        # que de una sesión **sin** subagentes no se sabía nada: ni si estaba
+        # trabajando. Su `mtime` es el latido y su cola dice qué está haciendo.
+        transcripcion = os.path.join(carpeta_de(d.get("cwd") or "", raiz),
+                                     "%s.jsonl" % (d.get("sessionId") or ""))
+        try:
+            ultimo = os.path.getmtime(transcripcion)
+        except OSError:
+            ultimo = None
+        if ultimo is None:
+            que, sobre, motivo_que = "", "", "no encontré su transcripción"
+        else:
+            que, sobre, motivo_que = que_hace(transcripcion, raiz)
         salida.append({
+            "ultimo": ultimo,
+            "quieto_hace": None if ultimo is None else max(0, int(ahora - ultimo)),
+            "que": que,
+            "sobre": sobre,
+            "motivo_que": motivo_que,
             "pid": pid,
             "viva": _vive(pid),
             "sesion": d.get("sessionId") or "",
@@ -293,8 +475,15 @@ def agentes(cwd, sesion, raiz=None, ahora=None):
             arrancado = os.path.getmtime(os.path.join(carpeta, m))
         except OSError:
             arrancado = None
+        if ultimo is None:
+            que, sobre, motivo_que = "", "", ""
+        else:
+            que, sobre, motivo_que = que_hace(transcripcion, raiz)
         planos.append({
             "id": ident,
+            "que": que,
+            "sobre": sobre,
+            "motivo_que": motivo_que,
             "tipo": d.get("agentType") or "",
             "descripcion": limpiar_secreto(d.get("description") or ""),
             "profundidad": d.get("spawnDepth"),

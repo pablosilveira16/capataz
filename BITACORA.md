@@ -1148,3 +1148,97 @@ nuevas son las 16 de la § 10 de la pantalla y las que sumaron las filas de este
 seguimiento; `verificar-consola.py` subió sola de 103 a 105 porque hay dos
 agentes background en la máquina y tiene aserciones por agente — otro total que
 se mueve con el ambiente, primo hermano del T8.
+
+---
+
+# Tanda 6 · Qué está haciendo cada agente, y la promesa que se hizo más chica
+
+Pablo preguntó si se podía tener «algún dato más de lo que está haciendo cada
+agente». Hasta acá el tablero contestaba *si* trabaja —hace cuánto escribió— y
+no *qué* hace.
+
+## Lo que se midió antes de elegir
+
+- **`claude logs <id>` no sirve.** Para un background parado devuelve
+  `Couldn't read logs — connect ENOENT …/control.sock`: anda sólo mientras el
+  demonio vive. Descartado por medición, no por opinión.
+- **El `.meta.json` de un subagente ya está exprimido**: cuatro campos, y la
+  `description` ya se muestra.
+- **Lo que falta está en la transcripción**, que es justo lo que `taller.py`
+  prometía no abrir jamás. Leyendo **los últimos 64 KB** entran 27 eventos y el
+  último `tool_use` trae `name` y un `description` escrito para humanos.
+
+## La promesa no se borró: se hizo más chica y más verificable
+
+La decisión fue de Pablo: leer la cola. El motivo original de la promesa sigue
+siendo cierto —una transcripción es todo lo que el agente leyó—, así que lo que
+cambia es el alcance, y lo que lo sostiene es una **lista blanca**: el nombre de
+la herramienta, su `description`, y el **basename** de la ruta. Nunca el
+`command` de un Bash, nunca el texto de un mensaje, nunca un `old_string`. Es
+lista blanca y no lista negra porque una lista de lo prohibido es por donde se
+escapa el primero que nadie previó.
+
+El arnés pasó de contar «un solo `io.open`» a contar **exactamente dos**, y a
+exigir cuál está en cuál función: `_abrir` para los `.json` chicos, `_cola` para
+la transcripción — más una aserción de que `_cola` usa `seek` y no lee entero,
+porque en esta máquina hay transcripciones de 13 MB.
+
+## Tres aserciones que parecían buenas y eran vacuas
+
+Esta tanda las encontró a las tres poniendo bugs, y las tres enseñan lo mismo:
+**una aserción que no se vio roja no está verificada.**
+
+1. **El señuelo con forma de token.** Se plantó un `ghp_…` adentro del `command`
+   y se afirmó que no salía. Puesto el bug —`command` adentro de la lista
+   blanca— la aserción **seguía pasando**: `limpiar_secreto` tapaba el token y
+   lo mostraba como «token». El canario tuvo que ser una cadena sin forma de
+   nada: si aparece, es porque el `command` salió, y no hay red que lo ataje.
+2. **Caminar la cola para atrás.** El caso ponía una herramienta vieja al
+   principio de un archivo grande y otra al final. Pero la vieja quedaba fuera
+   de los 64 KB, así que caminar para adelante o para atrás daba igual. Se
+   agregó un caso con **dos herramientas adentro de la misma cola**.
+3. **«Arranca en la consola»** (de la tanda anterior, y la misma lección al
+   revés): el bug puesto en `var VISTA` no ponía nada rojo porque
+   `arrancarVistas()` lo pisa. La aserción era buena; el bug estaba en el lugar
+   equivocado.
+
+## El bug que sólo se ve mirando
+
+Con todo en verde, la pantalla **no mostraba nada**. La API mandaba el dato, el
+arnés lo dibujaba, y el navegador no. La causa: la firma que decide si vale la
+pena repintar miraba **quién está y en qué estado**, no qué hace. Así que una
+sesión que pasa de `Bash` a `Edit` no se repinta nunca — un tablero en vivo
+mostrando lo de hace media hora, que es exactamente el bug del T21 en otra
+sección. Ahora `que` y `sobre` van en la firma, y hay una aserción que pinta
+**dos veces sobre el mismo contexto** —como hace el navegador— y exige que el
+cambio se vea. Se la vio roja sacando los dos campos de la firma.
+
+Y tres cosas de dibujo que ningún arnés puede ver:
+
+- `mcp__Claude_Browser__javascript_tool` ocupaba media pantalla. Se corta por el
+  separador y queda `javascript_tool`: cortar por largo dejaba
+  `mcp__Claude_Browser__javascr…`, que no dice nada.
+- `TaskCreate` se partía en «TaskC / reate». Un nombre de herramienta es una
+  palabra sola y partirla no la acorta, la hace ilegible.
+- El texto que escribe otro agente **viene con markdown** y salía literal
+  —«la magnitud `conductividad` en \*\*dS»—, la misma marca que ya tenían los
+  alcances de los dos módulos. Se sacan los backticks y los asteriscos, y el
+  corte va en un espacio y no en el medio de una palabra.
+
+## El desacuerdo que se encontró solo
+
+A mitad de tanda `verificar-consola.py` se puso rojo sin que nadie tocara la
+consola: `cotejar` había encontrado un desacuerdo **de verdad**. El background
+`c9b6af26` figura con `state: blocked` y **ya no trae `pid`** —el proceso murió
+y el registro del CLI quedó viejo—, mientras su archivo desapareció. La pantalla
+dice «trabado: necesita a una persona» y no es cierto: está muerto. Quedó como
+T37.
+
+Lo que se arregló acá fue el arnés: pedía **cero** desacuerdos contra la máquina
+de verdad, y eso es pedirle que la máquina nunca tenga nada raro. Ahora exige
+que ninguno sea de los **dos declarados como falsos positivos**, y si hay otros
+los imprime. La roja era del arnés; el hallazgo, del código.
+
+## El total
+
+**699 aserciones en verde**, cero rojas. Antes de la tanda eran 663.
