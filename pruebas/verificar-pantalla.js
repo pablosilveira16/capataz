@@ -61,10 +61,20 @@ const datos = JSON.parse(execFileSync(
 ));
 
 // --- el DOM más chico que hace falta ---------------------------------------
-function nodo() {
+// Los atributos son de verdad —`hidden` y `aria-current` son TODO el mecanismo
+// de las pestañas—, así que el nodo de mentira los guarda. Con un `setAttribute`
+// que no hace nada, `irA()` corre entero, no rompe, y no cambia nada: la § 10
+// pasaría en verde sin que la navegación funcionara.
+function nodo(attrs) {
+  const a = Object.assign({}, attrs || {});
   return {
     textContent: "", innerHTML: "", className: "",
     classList: { add() {}, remove() {} },
+    getAttribute: (k) => (k in a ? a[k] : null),
+    setAttribute: (k, v) => { a[k] = v; },
+    removeAttribute: (k) => { delete a[k]; },
+    hasAttribute: (k) => k in a,
+    atributos: a,
     querySelector: () => null, querySelectorAll: () => []
   };
 }
@@ -80,14 +90,21 @@ function armarPantalla() {
     // Y los dos de la consola. Faltando, `pintarConsola()` escribe sobre
     // `undefined` y este arnés se cae con 0 aserciones — que es exactamente
     // como se descubrió que faltaban.
-    consola: nodo(), "alcance-consola": nodo()
+    consola: nodo(), "alcance-consola": nodo(),
+    // El shell: los dos lugares donde se dibuja el menú.
+    "nav-principal": nodo(), tabbar: nodo()
   };
+  // Las cuatro vistas, con el `hidden` inicial que tiene el marcado: la primera
+  // abierta y las otras tres cerradas. Si acá arrancaran todas visibles, la
+  // aserción de «sólo una a la vez» no verificaría el estado inicial.
+  const vistas = ["consola", "taller", "agentes", "proyectos"].map((v, i) =>
+    nodo(i === 0 ? { "data-vista": v } : { "data-vista": v, hidden: "" }));
   const relojes = [];
   const contexto = {
     window: {},
     document: {
       getElementById: (id) => nodos[id],
-      querySelectorAll: () => [],
+      querySelectorAll: (sel) => (sel === ".vista" ? vistas : []),
       body: nodo()
     },
     console: console,
@@ -101,7 +118,7 @@ function armarPantalla() {
     setInterval: (fn, ms) => { relojes.push(ms); return relojes.length; }
   };
   contexto.window.CAPATAZ_DATOS = null;
-  return { nodos, contexto, relojes };
+  return { nodos, contexto, relojes, vistas };
 }
 
 const HTML = fs.readFileSync(path.join(RAIZ, "capataz.html"), "utf-8");
@@ -112,12 +129,13 @@ const CODIGO = guiones.join("\n").replace(/<\/?script>/g, "");
 af("y el guión no está vacío", CODIGO.length > 2000, String(CODIGO.length));
 
 function pintarCon(d) {
-  const { nodos, contexto, relojes } = armarPantalla();
+  const { nodos, contexto, relojes, vistas } = armarPantalla();
   contexto.window.CAPATAZ_DATOS = d;
   vm.createContext(contexto);
   vm.runInContext(CODIGO, contexto, { filename: "capataz.html" });
   nodos.relojes = relojes;
   nodos.contexto = contexto;
+  nodos.vistas = vistas;
   return nodos;
 }
 
@@ -668,6 +686,105 @@ af("con uno, se muestra y se ven **las dos** versiones",
 af("y se dice que capataz no eligió ganador",
    p9d.consola.innerHTML.indexOf("no elige un ganador") >= 0 ||
    p9d.consola.innerHTML.indexOf("no elige") >= 0);
+
+/* -------------------------------------------------------------------------
+   § 10 · El menú — y que una pestaña no esconda nada
+
+   El pedido fue «una app con menús, y el primer dashboard el de los agentes de
+   la consola». Lo que hay que verificar no es que el menú se dibuje: es que
+   **navegar no haga a capataz menos honesto**. Apiladas, las cuatro secciones
+   se veían al pasar; detrás de un menú, un «no pude leer» que nadie abre es un
+   error que no existe.
+
+   Por eso las dos mitades: la marca **sale** cuando hay algo, y **no sale**
+   cuando no lo hay. Sin la segunda, prender las cuatro pestañas siempre pasaría
+   este arnés y sería el aviso que enseña a ignorarse.
+------------------------------------------------------------------------- */
+console.log("\n§ 10 · El menú");
+
+function igualdad(descripcion, obtenido, esperado) {
+  af(descripcion, JSON.stringify(obtenido) === JSON.stringify(esperado),
+     "obtuve " + JSON.stringify(obtenido) + ", esperaba " + JSON.stringify(esperado));
+}
+
+const p10 = pintarCon(datos);
+const ctx10 = p10.contexto;
+
+af("arranca en la consola, que es lo que se pidió", ctx10.VISTA === "consola");
+igualdad("y esa es la única vista abierta",
+  p10.vistas.filter((v) => !v.hasAttribute("hidden")).map(
+    (v) => v.getAttribute("data-vista")), ["consola"]);
+af("el menú se dibuja en los dos lugares: lateral y tabbar",
+   p10["nav-principal"].innerHTML.indexOf("Consola") >= 0 &&
+   p10.tabbar.innerHTML.indexOf("Proyectos") >= 0);
+af("y las cuatro vistas están en el menú",
+   ["Consola", "Taller", "Agentes", "Proyectos"].every(
+     (r) => p10.tabbar.innerHTML.indexOf(r) >= 0));
+af("la pestaña abierta se marca como tal, para que se sepa dónde uno está",
+   /aria-current="page"/.test(p10.tabbar.innerHTML));
+
+ctx10.irA("proyectos");
+igualdad("al navegar, la abierta es la nueva y ninguna otra",
+  p10.vistas.filter((v) => !v.hasAttribute("hidden")).map(
+    (v) => v.getAttribute("data-vista")), ["proyectos"]);
+af("y el contenido de la vista de antes NO se borra: no se vuelve a pedir nada",
+   p10.consola.innerHTML.length > 50,
+   String(p10.consola.innerHTML.length));
+ctx10.irA("consola");
+igualdad("y se puede volver", p10.vistas.filter(
+  (v) => !v.hasAttribute("hidden")).map((v) => v.getAttribute("data-vista")),
+  ["consola"]);
+
+/* La frescura y el pulso viven en la barra, no adentro de una vista: si
+   estuvieran en una, las otras tres mostrarían datos sin decir de cuándo son. */
+af("la frescura se escribe en el shell y no en una pestaña",
+   p10.frescura.textContent.length > 5, p10.frescura.textContent);
+af("y sigue escrita después de navegar a otra vista",
+   (ctx10.irA("taller"), ctx10.pintarFrescura(),
+    p10.frescura.textContent.length > 5), p10.frescura.textContent);
+
+/* --- La marca: los dos lados ------------------------------------------ */
+function conTodoSano() {
+  const d = conConsola([bg("ok1", "trabajando")]);
+  d.taller = { ok: true, error: "", raiz: "/x", alcance: "esta máquina · ahora",
+               leido_en: d.ahora, sesiones: [], cuenta: {}, sueltas: 0 };
+  d.agentes = (d.agentes || []).map((a) => Object.assign({}, a,
+    { estado: "trabajando" }));
+  d.proyectos = d.proyectos.map((p) => Object.assign({}, p,
+    { seguimiento: Object.assign({}, p.seguimiento, { existe: true, error: "" }) }));
+  return d;
+}
+const sano = pintarCon(conTodoSano());
+af("con todo sano, NINGUNA pestaña se marca — si no, el aviso sale siempre",
+   sano.tabbar.innerHTML.indexOf("marca-vista") < 0,
+   sano.tabbar.innerHTML.slice(0, 200));
+/* La anti-vacua de la de arriba, y la razón de ser de toda la sección. */
+const rota = pintarCon(conConsola([], {
+  ok: false, error: "no pude correr «claude agents --json --all»" }));
+af("una consola que no se pudo leer marca su pestaña **estando escondida**",
+   (rota.contexto.irA("proyectos"),
+    rota.tabbar.innerHTML.indexOf("marca-vista") >= 0),
+   rota.tabbar.innerHTML.slice(0, 240));
+af("un background esperando a una persona también marca",
+   pintarCon(conConsola([bg("b1", "esperando")])).tabbar
+     .innerHTML.indexOf("marca-vista") >= 0);
+af("pero uno terminado no: es un hecho, no un pendiente",
+   pintarCon(conConsola([bg("b1", "terminado")])).tabbar
+     .innerHTML.indexOf("marca-vista") < 0);
+
+/* Y los tres estados que NO pueden marcar, porque salen en todas las corridas.
+   Medido el 2026-08-15 contra los datos de verdad: los cuatro agentes del
+   tablero están «caído» y los tres proyectos tienen filas «sin estado». */
+const conCaidos = conTodoSano();
+conCaidos.agentes = [{ quien: "x", proyecto: "P", que: "r", estado: "caído",
+                       punto: "", asunto: "", sha: "a" }];
+af("«caído» NO marca la pestaña de agentes: es el estado más común del tablero",
+   pintarCon(conCaidos).tabbar.innerHTML.indexOf("marca-vista") < 0);
+const conSinRama = conTodoSano();
+conSinRama.agentes = [{ quien: "x", proyecto: "P", que: "r", estado: "sin rama",
+                        punto: "T1", asunto: "", sha: "" }];
+af("«sin rama» sí marca: es un `en curso` del que no llegó ni un commit",
+   pintarCon(conSinRama).tabbar.innerHTML.indexOf("marca-vista") >= 0);
 
 console.log("\nASERCIONES: " + ASER + "\nROJAS: " + ROJAS);
 process.exit(ROJAS ? 1 : 0);

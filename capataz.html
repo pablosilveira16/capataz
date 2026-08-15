@@ -27,10 +27,107 @@ html, body { margin: 0; padding: 0; max-width: 100%; overflow-x: hidden; }
 body {
   background: #12141a; color: #e6e8ee;
   font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  padding: 10px 10px 40px; overflow-wrap: anywhere; word-break: break-word;
+  /* Sin padding lateral: lo pone `.app`. La barra tiene que llegar de borde a
+     borde, y sacarla del padding con un margen negativo dejaba el primer título
+     seis píxeles **debajo** de ella con la página sin scrollear — medido en el
+     navegador, no supuesto. */
+  padding: 0 0 40px; overflow-wrap: anywhere; word-break: break-word;
+}
+/* Espacio para la tabbar fija: sin esto, el último renglón de cualquier vista
+   queda debajo del menú y no se puede leer. Se vio mirando el teléfono. */
+@media (max-width: 699px) {
+  body { padding-bottom: calc(66px + env(safe-area-inset-bottom)); }
 }
 .hoja { max-width: 340px; margin: 0 auto; }
 @media (min-width: 700px) { .hoja { max-width: 640px; } }
+
+/* ---------------------------------------------------------------------------
+   El shell: barra arriba, menú al costado en pantalla ancha, tabbar abajo en
+   teléfono. La forma está copiada del shell de ERP 360 (`static/index.html`) a
+   propósito: son dos tableros del mismo sistema y aprender a moverse en uno
+   tiene que servir para el otro.
+
+   **Lo que NO se movió a una pestaña: la frescura y el pulso.** Viven en la
+   barra, visibles desde cualquier vista. Adentro de una, las otras tres
+   quedarían mostrando datos sin decir de cuándo son — que es la regla 3 rota
+   justo en el dato que dice si creerle al resto de la pantalla.
+--------------------------------------------------------------------------- */
+.shell { position: sticky; top: 0; z-index: 20; display: flex; align-items: center;
+         gap: 8px; padding: 8px 10px; background: #161922;
+         border-bottom: 1px solid #262b38; }
+.app { padding: 10px 10px 0; }
+/* `white-space: nowrap` y `flex: 0 0 auto`: sin los dos, el estado —que es
+   texto largo— le come el ancho a la marca y «capataz» sale partido en dos
+   renglones, «cap a / ta z». Se vio mirando el teléfono, no en el arnés: para
+   él es una cadena que está entera. La hoja de estilo es de los dos lados y el
+   que decide quién cede el ancho es el contenedor. */
+.shell .marca { font: 600 15px/1 -apple-system, BlinkMacSystemFont, sans-serif;
+                letter-spacing: .5px; white-space: nowrap; flex: 0 0 auto; }
+.shell .marca b { color: #7fb2ff; font-weight: 700; }
+/* El que cede es el estado, y cede **cortando el renglón de abajo**: la hora y
+   la cuenta de proyectos son lo prescindible. La frescura de arriba no se
+   corta nunca — es la que dice si creerle al resto de la pantalla. */
+.shell-estado { margin-left: auto; text-align: right; font-size: 10px;
+                color: #8b93a7; line-height: 1.25; min-width: 0; flex: 1 1 auto; }
+.shell-estado .cuando { display: block; color: #6b7387;
+                        white-space: nowrap; overflow: hidden;
+                        text-overflow: ellipsis; }
+
+.app { display: block; }
+@media (min-width: 700px) {
+  .app { display: flex; gap: 14px; align-items: flex-start; max-width: 900px;
+         margin: 0 auto; }
+  .lateral { position: sticky; top: 52px; width: 190px; flex: 0 0 190px;
+             padding-top: 12px; }
+  .contenido { flex: 1 1 auto; min-width: 0; }
+  .tabbar-envoltorio { display: none; }
+}
+@media (max-width: 699px) { .lateral { display: none; } }
+
+/* El menú se dibuja de `VISTAS`, en un solo lugar: una vista nueva aparece en
+   el lateral y en la tabbar sin tocar el marcado. */
+nav.principal { display: flex; flex-direction: column; gap: 2px; }
+nav.principal button { display: flex; align-items: center; gap: 8px; width: 100%;
+  text-align: left; background: transparent; border: 1px solid transparent;
+  color: #b9c0d0; font: 500 13px/1.2 inherit; padding: 9px 10px;
+  border-radius: 8px; cursor: pointer; }
+nav.principal button:hover { background: #1b1e27; }
+nav.principal button[aria-current="page"] { background: #1f2532; color: #e6e8ee;
+  border-color: #33405c; }
+
+.tabbar-envoltorio { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  background: #161922; border-top: 1px solid #262b38;
+  padding-bottom: env(safe-area-inset-bottom); }
+.tabbar { display: flex; }
+.tabbar button { flex: 1 1 0; min-width: 0; background: transparent; border: 0;
+  color: #8b93a7; font: 500 10px/1.15 inherit; padding: 7px 2px 8px;
+  cursor: pointer; display: flex; flex-direction: column; align-items: center;
+  gap: 3px; border-top: 2px solid transparent; }
+.tabbar button[aria-current="page"] { color: #cfd9ee; border-top-color: #7fb2ff; }
+.tabbar .icono, nav.principal .icono { font-size: 15px; line-height: 1; }
+.tabbar .rotulo { max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+                  white-space: nowrap; }
+
+/* La marca de una pestaña que tiene algo. **Es la mitad del cambio.**
+   Apiladas, las cuatro secciones se veían al pasar; con pestañas, un «no pude
+   leer» que vive detrás de un menú es un error que nadie ve — o sea que
+   navegar por pestañas haría a capataz MENOS honesto que la página vertical.
+   Por eso una vista escondida marca su pestaña.
+
+   Y marca sólo dos cosas: **lo que no se pudo leer** y **lo que pide una
+   persona**. No los estados normales: «sin estado» y «CI · no sé» salen en
+   todas las corridas, y el corolario de la regla 3 dice que un aviso que sale
+   siempre enseña a ignorarse. → `pruebas/verificar-pantalla.js` § 10 */
+.marca-vista { display: inline-block; min-width: 7px; height: 7px;
+               border-radius: 99px; background: #e0a340; margin-left: auto; }
+.tabbar .marca-vista { position: absolute; transform: translate(14px, -3px);
+                       margin: 0; }
+.tabbar button { position: relative; }
+
+/* Sólo una vista a la vez. `hidden` a secas no alcanza: `display:flex` de
+   algunos hijos lo pisa. */
+.vista[hidden] { display: none !important; }
+.vista > h3:first-child { margin-top: 4px; }
 
 h1 { font-size: 17px; margin: 0 0 2px; letter-spacing: .5px; }
 h2 { font-size: 16px; margin: 0 0 2px; }
@@ -178,25 +275,65 @@ details p { font-size: 11px; color: #8b93a7; margin: 5px 0 0; }
 </style>
 </head>
 <body>
-<div class="hoja">
-  <h1>capataz</h1>
-  <div class="tenue" id="cabecera">leyendo…</div>
-  <h3><span class="pulso" id="pulso"></span>Agentes ahora</h3>
-  <div class="tenue" id="frescura">…</div>
-  <div id="agentes"></div>
-  <h3>El taller</h3>
-  <div class="tenue" id="alcance">…</div>
-  <div id="taller"></div>
-  <h3>Agentes background</h3>
-  <div class="tenue" id="alcance-consola">…</div>
-  <div id="consola"></div>
-  <h3>Los proyectos</h3>
-  <div id="cuerpo"></div>
-  <div class="pie muy-tenue">
-    Capataz sólo lee, y lee de GitHub. El SEGUIMIENTO de cada repositorio es la
-    verdad; git es el árbitro.
+
+<!-- La barra. Lleva lo que tiene que verse desde CUALQUIER vista: el pulso, la
+     frescura y hace cuánto se leyó GitHub. Si eso viviera adentro de una
+     pestaña, las otras tres mostrarían datos sin decir de cuándo son. -->
+<header class="shell">
+  <span class="pulso" id="pulso"></span>
+  <span class="marca">capa<b>taz</b></span>
+  <div class="shell-estado">
+    <span id="frescura">…</span>
+    <span class="cuando" id="cabecera">leyendo…</span>
+  </div>
+</header>
+
+<div class="app">
+  <aside class="lateral">
+    <nav class="principal" id="nav-principal" aria-label="Secciones"></nav>
+  </aside>
+
+  <div class="contenido">
+    <main class="hoja" id="contenido">
+      <!-- Las cuatro vistas. La primera es la consola: es lo que se pidió y es
+           también lo único de la pantalla que puede pedir que alguien vaya a
+           hacer algo ahora mismo. -->
+      <section class="vista" data-vista="consola">
+        <h3>Agentes background</h3>
+        <div class="tenue" id="alcance-consola">…</div>
+        <div id="consola"></div>
+      </section>
+
+      <section class="vista" data-vista="taller" hidden>
+        <h3>El taller</h3>
+        <div class="tenue" id="alcance">…</div>
+        <div id="taller"></div>
+      </section>
+
+      <section class="vista" data-vista="agentes" hidden>
+        <h3>Agentes ahora</h3>
+        <div class="tenue">Sale de GitHub: quién tiene una rama por delante de
+          <code>main</code>. Un agente que empuja derecho a <code>main</code> no
+          aparece acá — el taller sí lo ve, si corre en esta máquina.</div>
+        <div id="agentes"></div>
+      </section>
+
+      <section class="vista" data-vista="proyectos" hidden>
+        <h3>Los proyectos</h3>
+        <div id="cuerpo"></div>
+      </section>
+
+      <div class="pie muy-tenue">
+        Capataz sólo lee, y lee de GitHub. El SEGUIMIENTO de cada repositorio es
+        la verdad; git es el árbitro.
+      </div>
+    </main>
   </div>
 </div>
+
+<nav class="tabbar-envoltorio" aria-label="Secciones">
+  <div class="tabbar" id="tabbar"></div>
+</nav>
 <!--DATOS-INCRUSTADOS-->
 <script>
 "use strict";
@@ -438,21 +575,12 @@ function tarjeta(pr) {
   return h + "</div>";
 }
 
-function pintar(d) {
-  document.getElementById("cabecera").textContent =
-    d.cuando + " · " + d.proyectos.length + " proyecto" +
-    (d.proyectos.length === 1 ? "" : "s") + " vigilado" +
-    (d.proyectos.length === 1 ? "" : "s") + " en GitHub";
-  var h = "";
-  if (d.sin_proyectos) {
-    h = '<div class="tarjeta"><h2>Ningún proyecto vigilado</h2>' +
-        '<div class="tenue">Agregá uno en <code>proyectos.json</code>: el ' +
-        '<code>owner/repo</code> de GitHub y el nombre de su archivo de ' +
-        'seguimiento, porque no todos se llaman igual.</div></div>';
-  }
-  for (var i = 0; i < d.proyectos.length; i++) h += tarjeta(d.proyectos[i]);
-  document.getElementById("cuerpo").innerHTML = h;
-}
+/* Acá vivía una **segunda** `pintar(d)`, la del día cero: quince líneas que
+   sólo dibujaban las tarjetas de proyecto. Quedó cuando se agregó la vista en
+   vivo, y en JavaScript la última declaración gana, así que hacía años que no
+   se ejecutaba — dos versiones de la misma función y ninguna regla sobre cuál
+   gana, adentro del proyecto que tiene eso escrito como regla 1. Se borró el
+   2026-08-15 al reordenar la pantalla; la que corre está más abajo. */
 
 /* ---------------------------------------------------------------------------
    El demonio: tres relojes, y ninguno miente sobre lo que sabe el otro
@@ -810,6 +938,113 @@ function pintarConsola() {
   cont.innerHTML = h;
 }
 
+/* ---------------------------------------------------------------------------
+   El menú, y la marca que hace que una pestaña no esconda nada.
+
+   Las cuatro vistas se declaran en UN lugar: el lateral y la tabbar se dibujan
+   de acá, así que agregar una quinta no es tocar el marcado en tres lados.
+
+   `problemasDe` es la mitad que justifica el cambio. Apiladas, las secciones se
+   veían al pasar; detrás de un menú, un «no pude leer» que nadie abre es un
+   error que no existe. Entonces la pestaña se marca **aunque esté escondida**.
+
+   Y marca dos cosas nada más: **lo que no se pudo leer** y **lo que pide una
+   persona**. Los estados normales no: medido el 2026-08-15, los cuatro agentes
+   de este tablero están `caído` y los tres proyectos tienen filas «sin estado»,
+   así que marcar por eso sería prender las cuatro pestañas en todas las
+   corridas — el aviso que enseña a ignorarse, corolario de la regla 3.
+--------------------------------------------------------------------------- */
+var VISTAS = [
+  { clave: "consola",   rotulo: "Consola",   icono: "◆" },
+  { clave: "taller",    rotulo: "Taller",    icono: "◈" },
+  { clave: "agentes",   rotulo: "Agentes",   icono: "◉" },
+  { clave: "proyectos", rotulo: "Proyectos", icono: "▦" }
+];
+/* La consola primero, y es una decisión: es lo único de la pantalla que puede
+   pedir que alguien haga algo ahora mismo.
+
+   **Quién decide de verdad con cuál se abre es `arrancarVistas()`**, abajo;
+   esto es el valor con el que se dibuja el menú antes de que ésa corra. Vale
+   escribirlo porque poner un bug acá **no pone nada rojo** —lo pisa el arranque
+   en el mismo tick— y eso se confundió una vez con una aserción vacua. */
+var VISTA = VISTAS[0].clave;
+
+function problemasDe(d, clave) {
+  if (!d) return 0;
+  if (clave === "consola") {
+    var c = d.consola;
+    if (!c) return 0;
+    if (!c.ok) return 1;
+    return (c.background || []).filter(function (b) {
+      /* `esperando` es un agente trabado que necesita a una persona, y `falló`
+         terminó con error. Los otros cuatro estados no marcan: un background
+         `terminado` o `parado` es un hecho, no un pendiente. */
+      return b.estado === "esperando" || b.estado === "falló";
+    }).length;
+  }
+  if (clave === "taller") return (d.taller && !d.taller.ok) ? 1 : 0;
+  if (clave === "agentes") {
+    /* `sin rama` es un `en curso (fulano)` del que no llegó ni un commit: algo
+       que no cierra. `caído` NO marca — es el estado más común de este
+       tablero. */
+    return (d.agentes || []).filter(function (a) {
+      return a.estado === "sin rama";
+    }).length;
+  }
+  if (clave === "proyectos") {
+    return (d.proyectos || []).filter(function (p) {
+      var s = p.seguimiento || {};
+      return s.existe === false || !!s.error;
+    }).length;
+  }
+  return 0;
+}
+
+function irA(clave) {
+  VISTA = clave;
+  var vistas = document.querySelectorAll(".vista");
+  for (var i = 0; i < vistas.length; i++) {
+    var v = vistas[i];
+    if (v.getAttribute("data-vista") === clave) v.removeAttribute("hidden");
+    else v.setAttribute("hidden", "");
+  }
+  /* Cambiar de pestaña **no vuelve a pedir nada**: se dibuja de `D`, la misma
+     foto que ya está. Un menú que dispara una lectura por toque es un menú que
+     hace parpadear el tablero. */
+  pintarNav();
+  try { if (window.location) window.location.hash = clave; } catch (e) { }
+}
+
+function botonVista(v) {
+  var n = problemasDe(D, v.clave);
+  return '<button type="button" data-vista="' + v.clave + '"' +
+    (v.clave === VISTA ? ' aria-current="page"' : '') +
+    ' aria-label="' + esc(v.rotulo) + '">' +
+    '<span class="icono" aria-hidden="true">' + v.icono + '</span>' +
+    '<span class="rotulo">' + esc(v.rotulo) + '</span>' +
+    (n ? '<span class="marca-vista" title="' + n + ' para mirar acá"></span>' : '') +
+    '</button>';
+}
+
+function pintarNav() {
+  var h = "";
+  for (var j = 0; j < VISTAS.length; j++) h += botonVista(VISTAS[j]);
+  var lugares = ["nav-principal", "tabbar"];
+  for (var i = 0; i < lugares.length; i++) {
+    var cont = document.getElementById(lugares[i]);
+    if (!cont) continue;
+    cont.innerHTML = h;
+    /* El manejador se cuelga después de escribir el HTML, que es como dibuja
+       todo el resto de este archivo. */
+    var botones = cont.querySelectorAll("button");
+    for (var k = 0; k < botones.length; k++) {
+      botones[k].onclick = (function (clave) {
+        return function () { irA(clave); };
+      })(botones[k].getAttribute("data-vista"));
+    }
+  }
+}
+
 function pintar(d) {
   D = d;
   T_RECIBIDO = Date.now();
@@ -854,6 +1089,11 @@ function pintar(d) {
   }
   for (var i = 0; i < d.proyectos.length; i++) h += tarjeta(d.proyectos[i]);
   document.getElementById("cuerpo").innerHTML = h;
+
+  /* El menú se repinta con cada dato, porque las marcas salen del dato: una
+     consola que se cayó recién tiene que prender su pestaña sin que nadie
+     navegue hasta ahí. */
+  pintarNav();
 }
 
 function traer() {
@@ -873,6 +1113,19 @@ function tick() {
   pintarFrescura();
 }
 
+/* La vista con la que se abre. Por defecto la consola —lo que se pidió—, y si
+   la dirección trae un `#taller` se respeta: recargar en el teléfono no tiene
+   por qué devolverte al principio. */
+function arrancarVistas() {
+  var pedida = "";
+  try {
+    pedida = ((window.location && window.location.hash) || "").replace("#", "");
+  } catch (e) { pedida = ""; }
+  var vale = false;
+  for (var i = 0; i < VISTAS.length; i++) if (VISTAS[i].clave === pedida) vale = true;
+  irA(vale ? pedida : VISTAS[0].clave);
+}
+
 if (window.CAPATAZ_DATOS) {
   /* Instantánea estática: los datos vienen incrustados y no hay a quién
      preguntarle. Es lo que se abre con `file://` para mirar el ancho angosto.
@@ -880,9 +1133,11 @@ if (window.CAPATAZ_DATOS) {
      una foto, porque nadie la está refrescando. */
   ESTATICA = true;
   pintar(window.CAPATAZ_DATOS);
+  arrancarVistas();
   setInterval(tick, 1000);
   tick();
 } else {
+  arrancarVistas();
   traer();
   setInterval(traer, 2000);
   setInterval(tick, 1000);

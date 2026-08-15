@@ -104,17 +104,45 @@ m = re.search(r"\.hoja\s*\{[^}]*?max-width\s*:\s*(\d+)px", angosta)
 af("la hoja declara un max-width", bool(m))
 hoja = int(m.group(1)) if m else 10 ** 6
 
-m = re.search(r"(?m)^body\s*\{[^}]*?padding\s*:\s*([^;]+);", angosta, re.S)
-af("el body declara su padding", bool(m))
-partes = (m.group(1).split() if m else [])
-nums = [int(x[:-2]) for x in partes if x.endswith("px")]
-if len(nums) == 1:
-    lateral = nums[0]
-elif len(nums) >= 2:
-    lateral = nums[1]          # padding: arriba lados …
-else:
-    lateral = 0
-af("el padding lateral del body es un número", bool(nums), partes)
+def lateral_de(selector):
+    """El padding de los costados de una regla, leído **por posición**.
+
+    La versión de antes se quedaba con los valores que terminaban en `px` y
+    perdía la posición: con `padding: 0 0 40px` se llevaba el 40 —que es el de
+    abajo— y lo sumaba dos veces como si fueran los costados, dando 420 px de
+    ancho declarado sobre una hoja que entra perfecta. Se puso roja el
+    2026-08-15 al mover el padding lateral del body al contenido, y **la roja
+    era del arnés**: la hoja estaba bien. Un cero sin unidad es un cero.
+    """
+    m = re.search(r"(?m)^%s\s*\{[^}]*?padding\s*:\s*([^;]+);" % re.escape(selector),
+                  angosta, re.S)
+    if not m:
+        return None, []
+    partes = m.group(1).split()
+    def px(v):
+        if v in ("0", "0px"):
+            return 0
+        return int(v[:-2]) if v.endswith("px") and v[:-2].isdigit() else None
+    v = [px(x) for x in partes]
+    if None in v or not v:
+        return None, partes
+    # `padding` abreviado: 1 valor = todos; 2 y 3 = arriba/costados/…; 4 =
+    # arriba, derecha, abajo, izquierda.
+    if len(v) == 1:
+        return v[0], partes
+    if len(v) in (2, 3):
+        return v[1], partes
+    return max(v[1], v[3]), partes
+
+
+# Los costados los puede poner el body **o** el contenedor de adentro: desde el
+# 2026-08-15 la barra llega de borde a borde y el padding lateral vive en `.app`.
+# Lo que tiene que entrar en 360 es la suma, mire donde mire.
+lat_body, partes_body = lateral_de("body")
+lat_app, partes_app = lateral_de(".app")
+af("el body declara su padding", lat_body is not None, partes_body)
+af("y el contenedor de las vistas también", lat_app is not None, partes_app)
+lateral = (lat_body or 0) + (lat_app or 0)
 
 igual("la hoja + los dos padding entran justo en %d px" % ANCHO,
       hoja + 2 * lateral <= ANCHO, True)

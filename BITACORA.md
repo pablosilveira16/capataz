@@ -1036,3 +1036,115 @@ Es el T8 exactamente, visto otra vez — el número se anotó primero como 638
 mirando la corrida de antes de escribir el cierre, y subió a 641 al escribirlo.
 Mientras el total se mueva con el largo de un archivo de texto, «el total bajó»
 no es una señal limpia.
+
+---
+
+# Tanda 5 · La app con menús, y la pestaña que no puede esconder nada
+
+Pedido de Pablo, textual: *«preciso que organices la app y que sea parecida al
+ERP o busquemos algún formato que sirva; tipo página vertical no sirve, tiene
+que ser una app con menús y el primer Dashboard el de los agentes de la
+consola»*.
+
+## El formato no se inventó: se copió del de al lado
+
+`ERP360/static/index.html` ya resuelve esto y hace meses: barra arriba, menú
+lateral en pantalla ancha y **tabbar abajo en teléfono**, con las secciones
+declaradas en un solo lugar. Son dos tableros del mismo sistema, así que aprender
+a moverse en uno tiene que servir para el otro. Lo único que no se copió es la
+implementación —capataz sigue siendo **un archivo sin dependencias**—, pero la
+forma es la misma.
+
+Cuatro vistas, y la primera es la consola porque es lo que se pidió y porque es
+lo único de la pantalla que puede pedir que alguien haga algo ahora mismo.
+
+## Lo que este cambio obligó a resolver, y es la mitad que vale
+
+Un menú esconde tres cuartas partes del tablero. Apiladas, las secciones se
+veían al pasar; **detrás de una pestaña, un «no pude leer» que nadie abre es un
+error que no existe.** Dicho de otra forma: navegar por pestañas, hecho sin
+cuidado, hace a capataz *menos* honesto que la página vertical que reemplaza.
+
+De ahí las dos decisiones que sostienen el cambio:
+
+1. **La frescura y el pulso viven en la barra**, no adentro de una vista. Si
+   estuvieran en una, las otras tres mostrarían datos sin decir de cuándo son —
+   la regla 3 rota justo en el dato que dice si creerle al resto de la pantalla.
+2. **Una vista escondida marca su pestaña.** Y marca dos cosas nada más: lo que
+   **no se pudo leer** y lo que **pide una persona**.
+
+El «nada más» de ahí es el corolario de la regla 3, y se decidió midiendo. Los
+candidatos obvios estaban todos descartados por los datos de hoy: los **cuatro**
+agentes del tablero están `caído` y los tres proyectos tienen filas «sin
+estado», así que marcar por eso sería prender las cuatro pestañas en todas las
+corridas — el aviso que enseña a ignorarse. Quedaron marcando: una sección que
+no se pudo leer, un background `esperando` o `falló`, un proyecto ilegible, y un
+`sin rama` (un `en curso (fulano)` del que no llegó ni un commit).
+
+Por eso la § 10 del arnés tiene aserción de los **dos** lados: que la marca
+salga con una consola caída **estando la pestaña escondida**, y que **no salga**
+con todo sano. Sin la segunda, prender las cuatro siempre pasaría el arnés.
+
+## El bug que estaba desde el día cero
+
+Al reordenar el marcado, un `Edit` falló diciendo que encontraba dos coincidencias
+idénticas. Eran dos **`function pintar(d)`** en el mismo archivo: la del día cero
+—quince líneas, sólo las tarjetas de proyecto— y la de la vista en vivo. En
+JavaScript la última declaración gana, así que la primera hacía tanto tiempo que
+no se ejecutaba que nadie se había enterado.
+
+Estaba en `HEAD` y en todos los commits anteriores. Dos versiones de la misma
+función y ninguna regla sobre cuál gana, adentro del proyecto que tiene
+exactamente eso escrito como regla 1. Se borró, y **la suite quedó igual de
+verde**: no la vigilaba nadie, que es la definición del código muerto.
+
+## Un bug puesto en el lugar equivocado no prueba nada
+
+Poniendo `var VISTA = "proyectos"` el arnés dio **cero rojas**, y por un momento
+pareció que la aserción «arranca en la consola» era vacua. No lo era: quien
+decide de verdad es `arrancarVistas()`, que corre en el mismo tick y pisa ese
+valor. Puesto el bug **ahí**, se ponen rojas dos. Queda escrito al lado de la
+variable, porque la conclusión fácil —«esta aserción no sirve»— habría borrado
+una aserción buena.
+
+## Lo que se miró con los ojos, y que ningún arnés encontró
+
+Los dos son de la barra nueva, y los dos aparecieron a 375 px:
+
+- **«capataz» salía partido en dos renglones**, «cap a / ta z»: el estado, que es
+  texto largo, le comía el ancho a la marca. Para el arnés es una cadena que
+  está entera.
+- **El primer título quedaba seis píxeles debajo de la barra con la página sin
+  scrollear.** Fue culpa del margen negativo con el que saqué la barra del
+  padding del body. Se arregló sacándole el padding lateral al body y
+  poniéndoselo al contenido, que además es lo que hace que la barra llegue de
+  borde a borde.
+
+Después, medido en el navegador: barra 0–55, primer título en 69, sin
+superposición, `scrollWidth == clientWidth == 375`, cero elementos pasando del
+ancho, el pie sin quedar tapado por la tabbar. Y a 1000 px, el lateral con la
+vista abierta marcada. Navegando de verdad: una sola vista abierta, el `#hash`
+sigue a la vista, y **el contenido de la anterior no se borra ni se vuelve a
+pedir** — cambiar de pestaña no dispara una lectura.
+
+## La roja que era del arnés, otra vez
+
+Mover el padding lateral del `body` al contenido puso roja a
+`verificar-angosto.py`: *«340 px de hoja + 2 × 40 px de padding = 420 px»*. La
+hoja entraba perfecta —el navegador decía 375 == 375 con cero desbordes—, así
+que la primera hipótesis fue la de `CLAUDE.md` § 2: **el arnés**. Y era.
+
+Leía el `padding` del body quedándose con los valores terminados en `px` y
+**perdiendo la posición**: de `padding: 0 0 40px` se llevaba el 40, que es el de
+abajo, y lo sumaba dos veces como si fueran los costados. Un cero sin unidad no
+existía para él. Ahora lee la abreviatura por posición —1, 2, 3 o 4 valores— y
+suma los costados del `body` **y** los del contenedor, que es donde viven desde
+hoy. Se la vio roja inflando el padding a 30 px: 400 px, roja.
+
+## El total
+
+**663 aserciones en verde**, cero rojas. Antes de esta tanda eran 641. Las
+nuevas son las 16 de la § 10 de la pantalla y las que sumaron las filas de este
+seguimiento; `verificar-consola.py` subió sola de 103 a 105 porque hay dos
+agentes background en la máquina y tiene aserciones por agente — otro total que
+se mueve con el ambiente, primo hermano del T8.
