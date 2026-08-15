@@ -76,7 +76,11 @@ function armarPantalla() {
     // sobre `undefined` y este arnés se caería antes de afirmar nada.
     agentes: nodo(), frescura: nodo(), pulso: nodo(),
     // Y los dos del taller, por lo mismo.
-    taller: nodo(), alcance: nodo()
+    taller: nodo(), alcance: nodo(),
+    // Y los dos de la consola. Faltando, `pintarConsola()` escribe sobre
+    // `undefined` y este arnés se cae con 0 aserciones — que es exactamente
+    // como se descubrió que faltaban.
+    consola: nodo(), "alcance-consola": nodo()
   };
   const relojes = [];
   const contexto = {
@@ -573,6 +577,97 @@ af("y cero sesiones es otra cosa: se dice que no hay ninguna abierta",
    p8d.taller.innerHTML.slice(0, 120));
 af("y avisa que los de otra máquina no se ven acá",
    p8d.taller.innerHTML.indexOf("otra máquina") >= 0);
+
+/* -------------------------------------------------------------------------
+   § 9 · La consola — los agentes background, dibujados
+
+   Es la tercera fuente y la única que sale de correr un programa. Tres cosas
+   tienen que ser ciertas **en la pantalla** y no sólo en el lector:
+
+     · `esperando` salta —es lo único que pide que alguien haga algo— y `no sé`
+       no se pinta de ningún color, que es la regla 3;
+     · no haber podido preguntar no se dibuja como «ningún agente»;
+     · **el desacuerdo entre las dos fuentes sólo aparece cuando lo hay.** Un
+       aviso que sale siempre enseña a ignorarse (corolario de la regla 3), así
+       que hay una aserción de cada lado: que sale, y que no sale.
+------------------------------------------------------------------------- */
+console.log("\n§ 9 · La consola");
+
+function conConsola(background, extra) {
+  const d = copia(datos);
+  d.consola = Object.assign({
+    ok: true, error: "", alcance: "esta máquina · ahora. Son los agentes background",
+    comando: "claude agents --json --all", preguntado_en: d.ahora,
+    background: background, interactivas: [], desacuerdos: [],
+    cuenta: { background: background.length, trabajando: 0, esperando: 0,
+              terminados: 0, interactivas: 0 }
+  }, extra || {});
+  return d;
+}
+
+function bg(id, estado, motivo) {
+  return { id: id, sesion: "s-" + id, pid: 10, nombre: "el " + id,
+           cwd: "/x/proy", clase: "background", state: "x", status: "y",
+           arrancada: 1, hace: 120, estado: estado, motivo_estado: motivo || "" };
+}
+
+const p9 = pintarCon(conConsola([
+  bg("b1", "esperando", "trabado: necesita a una persona"),
+  bg("b2", "trabajando"), bg("b3", "falló"), bg("b4", "terminado"),
+  bg("b5", "no sé", "el CLI dice `state: 'hibernating'`")]));
+const htmlC = p9.consola.innerHTML;
+
+af("el alcance de la consola está escrito y dice que es esta máquina",
+   p9["alcance-consola"].textContent.indexOf("esta máquina") >= 0,
+   p9["alcance-consola"].textContent);
+af("«esperando» se pinta ámbar: no está roto, está trabado esperando a alguien",
+   /c-esperando/.test(htmlC));
+af("y dice cómo se destraba", htmlC.indexOf("necesita a una persona") >= 0);
+af("«no sé» no se pinta de ningún color, y lleva la palabra cruda del CLI",
+   /nose/.test(htmlC) && htmlC.indexOf("hibernating") >= 0);
+af("«falló» sí es rojo: eso sí es un incendio", /c-fallo/.test(htmlC));
+af("«terminado» va apagado: es un hecho sabido, no un logro", /c-quieto/.test(htmlC));
+/* La anti-vacua de las cuatro de arriba: sin esto pasarían con una pantalla
+   que no pinta de verde nunca. */
+af("y «trabajando» SÍ lleva la clase de trabajando", /c-trabajando/.test(htmlC));
+af("el asa para abrirlo se muestra, y es un texto: capataz no lo corre",
+   htmlC.indexOf("claude attach b1") >= 0);
+af("el que espera a una persona va primero, antes que el que trabaja",
+   htmlC.indexOf("el b1") < htmlC.indexOf("el b2"));
+
+/* El estado de un background NO se recalcula con el reloj, al revés que el de
+   una rama y el de un subagente. Aquéllos son «hace cuánto que no se mueve»;
+   éste es un hecho que el CLI afirma. Recalcularlo sería inventarlo. */
+const viejo = bg("b9", "trabajando");
+viejo.hace = 999999;
+af("un background que arrancó hace un siglo sigue diciendo lo que dice el CLI",
+   /c-trabajando/.test(pintarCon(conConsola([viejo])).consola.innerHTML));
+
+/* No pude preguntar ≠ no hay ninguno. */
+const p9b = pintarCon(conConsola([], {
+  ok: false, error: "no pude correr «claude agents --json --all»: no such file" }));
+af("si la consola no se pudo leer, se dice y se nombra el comando que corrió",
+   p9b.consola.innerHTML.indexOf("claude agents --json --all") >= 0,
+   p9b.consola.innerHTML.slice(0, 140));
+af("y se aclara que el resto del tablero no depende de esto",
+   p9b.consola.innerHTML.indexOf("no depende") >= 0);
+const p9c = pintarCon(conConsola([]));
+af("y cero background es otra cosa: se dice que no hay ninguno",
+   p9c.consola.innerHTML.indexOf("ningún agente background") >= 0,
+   p9c.consola.innerHTML.slice(0, 140));
+
+/* Los dos lados del aviso que no puede salir siempre. */
+af("sin desacuerdos, la pantalla no dibuja ninguno",
+   p9c.consola.innerHTML.indexOf("no dicen lo mismo") < 0);
+const p9d = pintarCon(conConsola([], { desacuerdos: [{
+  sesion: "s-7", que: "la carpeta no coincide",
+  consola: "/uno", taller: "/otro" }] }));
+af("con uno, se muestra y se ven **las dos** versiones",
+   p9d.consola.innerHTML.indexOf("/uno") >= 0 &&
+   p9d.consola.innerHTML.indexOf("/otro") >= 0);
+af("y se dice que capataz no eligió ganador",
+   p9d.consola.innerHTML.indexOf("no elige un ganador") >= 0 ||
+   p9d.consola.innerHTML.indexOf("no elige") >= 0);
 
 console.log("\nASERCIONES: " + ASER + "\nROJAS: " + ROJAS);
 process.exit(ROJAS ? 1 : 0);

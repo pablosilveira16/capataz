@@ -70,6 +70,31 @@ h3 { font-size: 12px; margin: 12px 0 5px; text-transform: uppercase;
 .r-sinsenal { border-style: dashed; border-color: #55607a; background: transparent;
               color: #98a2b8; }
 .r-cerrado  { border-color: #3a3f52; color: #98a2b8; }
+
+/* La consola: los agentes background. `esperando` es ámbar y no rojo porque no
+   está roto —está trabado esperando a una persona—, y es lo único de esta
+   sección que pide que alguien haga algo: por eso va primero y por eso es el
+   único color que salta. `terminado`, `parado` y `en cola` son hechos sabidos y
+   van apagados; `falló` es rojo porque sí es un incendio.
+
+   Y acá **sí** existen «terminado» y «falló», que en el taller no existen. No es
+   una inconsistencia: de un subagente no hay marca de cierre en disco (T19), y
+   de un background el CLI la da. Dos preguntas parecidas con respuestas
+   distintas, y la pantalla dice la que corresponde a cada una. */
+.c-esperando  { border-color: #7a5a1a; background: #2a2212; color: #f0dca6; }
+.c-trabajando { border-color: #1e6b4f; background: #122b22; color: #a6f0d2; }
+.c-fallo      { border-color: #7a2020; background: #2a1212; color: #ffc9c9; }
+.c-quieto     { border-color: #3a3f52; color: #98a2b8; }
+.attach { font: 600 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+          color: #cfd5e4; background: #262c3b; padding: 3px 6px; border-radius: 5px;
+          display: inline-block; margin-top: 4px; }
+/* El desacuerdo entre las dos fuentes. **Casi siempre está vacío**, y ése es el
+   punto: si saliera en todas las corridas sería el aviso que enseña a
+   ignorarse, y el día que diga algo nadie lo lee (corolario de la regla 3). */
+.desacuerdo { border: 1px solid #6b1e4a; background: #2b1220; border-radius: 9px;
+              padding: 9px 10px; margin: 8px 0; font-size: 12px; }
+.desacuerdo b { color: #ffc9e0; }
+.desacuerdo .lado { color: #cfd5e4; margin-top: 3px; }
 .sesion { border: 1px solid #2f3648; border-radius: 9px; padding: 9px 10px;
           margin: 8px 0; background: #1a1f2b; }
 .sesion .cab { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
@@ -162,6 +187,9 @@ details p { font-size: 11px; color: #8b93a7; margin: 5px 0 0; }
   <h3>El taller</h3>
   <div class="tenue" id="alcance">…</div>
   <div id="taller"></div>
+  <h3>Agentes background</h3>
+  <div class="tenue" id="alcance-consola">…</div>
+  <div id="consola"></div>
   <h3>Los proyectos</h3>
   <div id="cuerpo"></div>
   <div class="pie muy-tenue">
@@ -446,6 +474,7 @@ var VISTOS = null;      /* sha por agente en la lectura anterior */
 var DESPIERTOS = {};    /* clave -> hasta cuándo mostrar que se despertó */
 var FIRMA = "";
 var FIRMA_TALLER = "";
+var FIRMA_CONSOLA = "";
 var LATE = false;
 var ESTATICA = false;
 var SIN_CONTACTO = 10;  /* segundos sin respuesta para dejar de creerle a la pantalla */
@@ -708,6 +737,79 @@ function pintarTaller() {
   cont.innerHTML = h;
 }
 
+/* ---------------------------------------------------------------------------
+   La consola: los agentes background, y el único dato que nadie más tiene.
+
+   Las otras dos secciones salen de git y de archivos. Ésta sale de correr
+   `claude agents --json --all`, y existe por una razón medida: el `state` de un
+   background no está en ningún archivo, y el de uno que **ya terminó** no está
+   en ninguna parte más —al pararse, su `<pid>.json` se borra—.
+
+   El estado NO se recalcula acá, al revés que el de las ramas y el del taller.
+   Aquéllos son un reloj —«hace cuánto que no se mueve»— y la pantalla los
+   vuelve a decidir cada segundo para no quedarse con una foto vieja. Éste es un
+   hecho que el CLI afirma, no un umbral: recalcularlo sería inventarlo.
+--------------------------------------------------------------------------- */
+var CLASE_CONSOLA = {
+  "trabajando": "c-trabajando", "esperando": "c-esperando", "falló": "c-fallo",
+  "terminado": "c-quieto", "parado": "c-quieto", "en cola": "c-quieto",
+  "no sé": "nose"
+};
+
+function pintarConsola() {
+  var cont = document.getElementById("consola");
+  var c = (D && D.consola) || null;
+  document.getElementById("alcance-consola").textContent =
+    c ? c.alcance : "esta máquina · ahora";
+  if (!c) { cont.innerHTML = ""; return; }
+  /* No haber podido preguntar y que no haya ninguno son cosas distintas, y la
+     que se borra siempre es la primera: sin el CLI la sección diría «ningún
+     agente background», que es exactamente la mentira de la regla 3. */
+  if (!c.ok) {
+    cont.innerHTML = '<div class="tarjeta"><h2>La consola no se pudo leer</h2>' +
+      '<div class="tenue">' + esc(c.error) + '</div>' +
+      '<div class="porque">Lo demás de esta pantalla no depende de esto: los ' +
+      'proyectos salen de GitHub y el taller, de los archivos.</div></div>';
+    return;
+  }
+  var h = "";
+  for (var i = 0; i < (c.desacuerdos || []).length; i++) {
+    var d = c.desacuerdos[i];
+    h += '<div class="desacuerdo"><b>Las dos fuentes no dicen lo mismo: ' +
+      esc(d.que) + '</b>' +
+      '<div class="lado">consola · ' + esc(d.consola) + '</div>' +
+      '<div class="lado">taller · ' + esc(d.taller) + '</div>' +
+      '<div class="porque">sesión ' + esc(d.sesion) + '. Capataz no elige un ' +
+      'ganador: para una sesión interactiva manda el archivo, y esto es algo ' +
+      'que esa regla no explica.</div></div>';
+  }
+  if (!c.background.length) {
+    cont.innerHTML = h + '<div class="nada">ningún agente background. Se ' +
+      'lanzan con <code>claude --bg</code>; las sesiones interactivas están ' +
+      'arriba, en el taller, que de cada una sabe el doble</div>';
+    return;
+  }
+  for (var j = 0; j < c.background.length; j++) {
+    var b = c.background[j];
+    h += '<div class="sesion"><div class="cab"><b>' +
+      esc(b.nombre || b.sesion) + '</b>' +
+      '<span class="chip ' + (CLASE_CONSOLA[b.estado] || "nose") + '">' +
+      esc(b.estado) + '</span>' +
+      (b.hace === null || b.hace === undefined ? '' :
+        '<span class="chip"><b>' + esc(hace(b.hace)) + '</b>arrancó</span>') +
+      '</div>' +
+      '<div class="tenue">' + esc(b.cwd) + '</div>' +
+      (b.motivo_estado ? '<div class="porque">' + esc(b.motivo_estado) +
+        '</div>' : '') +
+      /* El `id` corto se muestra porque es el asa: con él una persona abre la
+         sesión desde su terminal. Capataz lo escribe y no lo corre — la regla 1
+         no es que no exista el comando, es que no lo ejecuta capataz. */
+      (b.id ? '<div class="attach">claude attach ' + esc(b.id) + '</div>' : '') +
+      '</div>';
+  }
+  cont.innerHTML = h;
+}
+
 function pintar(d) {
   D = d;
   T_RECIBIDO = Date.now();
@@ -733,6 +835,15 @@ function pintar(d) {
       })];
     })) + "|" + ((d.taller && d.taller.ok) ? "ok" : (d.taller && d.taller.error));
   if (firmaT !== FIRMA_TALLER) { FIRMA_TALLER = firmaT; pintarTaller(); }
+
+  /* La firma de la consola ignora el reloj por lo mismo que la del taller: si
+     mirara `hace`, un background trabajando repintaría la sección entera cada
+     dos segundos. Mira quién está, en qué estado, y si hay desacuerdos. */
+  var firmaC = JSON.stringify((d.consola && d.consola.background || []).map(
+    function (b) { return [b.sesion, b.estado, b.id]; })) + "|" +
+    JSON.stringify(d.consola && d.consola.desacuerdos || []) + "|" +
+    ((d.consola && d.consola.ok) ? "ok" : (d.consola && d.consola.error));
+  if (firmaC !== FIRMA_CONSOLA) { FIRMA_CONSOLA = firmaC; pintarConsola(); }
 
   var h = "";
   if (d.sin_proyectos) {

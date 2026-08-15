@@ -36,8 +36,13 @@ echo
 # vigilados. Es el único que necesita red, y es el que vale de la tanda del
 # 2026-08-06: un lector de red probado sólo contra respuestas grabadas pasa
 # entero con la red rota. Si no hay salida, se pone rojo — no saltea.
+#
+# `verificar-consola.py` tiene la misma forma del problema con otro afuera: sale
+# a correr el `claude` **de esta máquina**. Si no está, se pone rojo y no
+# saltea — un lector del CLI probado sólo contra un `claude` de mentira pasa
+# entero con el CLI desinstalado, que es cuando la pantalla miente.
 for f in verificar-lector.py verificar-nube.py verificar-taller.py \
-         verificar-angosto.py verificar-credenciales.py; do
+         verificar-consola.py verificar-angosto.py verificar-credenciales.py; do
   [ -f "pruebas/$f" ] && correr "$f" python3; done
 for f in verificar-contrato.sh; do
   correr "$f" bash; done

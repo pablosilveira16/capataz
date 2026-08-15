@@ -212,8 +212,12 @@ def sesiones(raiz=None, ahora=None):
     """Las sesiones de Claude Code que esta máquina tiene registradas.
 
     Salen de `~/.claude/sessions/<pid>.json`, que es el registro que el propio
-    Claude Code mantiene. **Da más que `claude agents --json`** —once campos
-    contra seis, medido el 2026-08-06— y no cuesta lanzar un proceso.
+    Claude Code mantiene. Para una sesión **interactiva** el archivo **gana**:
+    da doce campos contra los seis de `claude agents --json` y no cuesta lanzar
+    un proceso. Ésa es la regla escrita de cuál fuente manda, y su otra mitad
+    está en `consola.py`: el `state` de un background y los background ya
+    terminados **no están acá y no pueden estar** —al pararse, este archivo se
+    borra—, así que ésos los contesta el CLI y nadie más.
 
     Un archivo puede quedar tirado si la sesión murió mal, así que cada una
     viene con `viva`, que se pregunta al sistema y no al archivo.
@@ -238,6 +242,11 @@ def sesiones(raiz=None, ahora=None):
             "sesion": d.get("sessionId") or "",
             "nombre": d.get("name") or "",
             "cwd": d.get("cwd") or "",
+            # `kind` viaja crudo, y el archivo escribe `"bg"` donde el CLI
+            # escribe `"background"` (medido el 2026-08-15). Traducirlo acá
+            # sería tapar la diferencia justo donde `consola.cotejar` tiene que
+            # poder verla; el alias se declara en un solo lugar y es suyo.
+            "clase": d.get("kind") or "",
             "arrancada": arrancada / 1000.0 if isinstance(arrancada, (int, float)) else None,
             "version": d.get("version") or "",
             "entrada": d.get("entrypoint") or "",

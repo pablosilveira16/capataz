@@ -487,6 +487,78 @@ try:
            (uno["traido_en"], tres["traido_en"]))
 
     # -----------------------------------------------------------------------
+    print("§ 5c · El espejo que el limpiador de temporales dejó a medias")
+    # -----------------------------------------------------------------------
+    #
+    # Encontrado el 2026-08-15 **mirando la pantalla**, no acá: los tres
+    # proyectos aparecían ilegibles con un gruñido de git —«not a git
+    # repository»— y el motivo era que `/var/folders/…/T` es temporal de verdad.
+    # macOS le borra los archivos viejos por antigüedad y **deja los
+    # directorios**, así que los espejos quedaron con `objects/` y `refs/` pero
+    # sin `HEAD` ni `config`. Capataz decidía «ya está clonado» mirando si
+    # existía la carpeta `objects/`, hacía `fetch` contra el esqueleto, y no se
+    # recuperaba nunca: ni reiniciando, porque la carpeta seguía ahí.
+    #
+    # Este arnés no lo podía ver, y ése es el punto: cada corrida clona en un
+    # `mkdtemp` nuevo, o sea siempre en el caso feliz. **Un espejo de un día
+    # para el otro era un camino que ninguna aserción recorría.** Acá se
+    # reproduce el destripe exacto y se exige que capataz se recupere solo.
+    if datos["ok"]:
+        destino = nube.carpeta_de(proy["repo"], BASE)
+        af("antes del destripe, el espejo es un espejo", nube._es_espejo(destino))
+        comidos = []
+        for archivo in ("HEAD", "config", "packed-refs", "description"):
+            ruta = os.path.join(destino, archivo)
+            if os.path.isfile(ruta):
+                os.remove(ruta)
+                comidos.append(archivo)
+        af("el destripe se hizo de verdad: se comieron HEAD y config",
+           "HEAD" in comidos and "config" in comidos, comidos)
+        af("y las carpetas quedaron, que es lo que hace el limpiador",
+           os.path.isdir(os.path.join(destino, "objects")))
+        af("capataz ya no lo confunde con un espejo bueno",
+           not nube._es_espejo(destino))
+
+        revivido = nube.leer(proy, base=BASE, ahora=HOY, refresco=0)
+        af("y al leer, se recupera solo: vuelve a clonar", revivido["ok"],
+           (revivido.get("error") or "")[:140])
+        texto = ((revivido.get("archivos") or {}).get("seguimiento")
+                 or {}).get("texto") or ""
+        af("el seguimiento se vuelve a leer entero, no a medias",
+           len(texto) > 1000, len(texto))
+        af("y el espejo quedó sano otra vez", nube._es_espejo(destino))
+
+    # El borrado llega con compuerta, que es lo que el T14 pedía: es la única
+    # escritura destructiva de capataz y no puede apuntar afuera. Sin estas
+    # cuatro, el arreglo de arriba sería un `rmtree` suelto en un tablero.
+    for afuera in (RAIZ, os.path.dirname(RAIZ), BASE,
+                   os.path.join(BASE, "..", "otra-cosa.git")):
+        try:
+            nube._tirar_espejo_roto(afuera, BASE)
+            af("borrar %s tendría que estar prohibido" % afuera, False)
+        except nube.FueraDelEspejo:
+            af("borrar %s: rechazado" % afuera, True)
+        except OSError:
+            af("borrar %s: rechazado" % afuera, True)
+    # Anti-vacua de las cuatro de arriba: sin esto pasarían con un
+    # `_tirar_espejo_roto` que rechaza absolutamente todo y nunca arregla nada.
+    sano = os.path.join(BASE, "inventado-para-el-arnes.git")
+    os.makedirs(os.path.join(sano, "objects"), exist_ok=True)
+    af("y un espejo destripado de los suyos SÍ se tira",
+       nube._tirar_espejo_roto(sano, BASE) and not os.path.isdir(sano))
+    # Adentro de la carpeta de espejos, pero sin la forma de uno: tampoco. Es la
+    # diferencia entre «borro lo mío» y «borro lo que haya en esta carpeta».
+    ajeno = os.path.join(BASE, "esto-no-es-un-espejo")
+    os.makedirs(ajeno, exist_ok=True)
+    try:
+        nube._tirar_espejo_roto(ajeno, BASE)
+        af("una carpeta sin forma de espejo tendría que estar protegida", False)
+    except nube.FueraDelEspejo:
+        af("una carpeta adentro del espejo pero sin forma de espejo, no se toca",
+           os.path.isdir(ajeno))
+    os.rmdir(ajeno)
+
+    # -----------------------------------------------------------------------
     print("§ 6 · El CI — lo grabado, y lo que sí se puede probar acá")
     # -----------------------------------------------------------------------
     #

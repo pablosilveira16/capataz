@@ -32,6 +32,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import consola
 import lector
 import nube
 import taller
@@ -105,6 +106,17 @@ def estado():
         # pero no cuesta red: son unos pocos archivos de cientos de bytes.
         vista_taller = taller.leer(ahora=ahora)
         vista_taller["sueltas"] = taller.empatar(vista_taller, proyectos)
+        # La tercera fuente, y contesta lo que ni git ni los archivos pueden:
+        # los agentes **background**. Su `state` no está en ningún archivo, y
+        # el de uno que ya terminó no está en ninguna parte más —el
+        # `<pid>.json` se borra al pararlo, medido el 2026-08-15—.
+        #
+        # `cotejar` es la regla 1 puesta donde por primera vez hay dos fuentes
+        # del mismo hecho: una sesión interactiva viva está en las dos. La regla
+        # escrita es que gana el archivo, y lo que **no** coincide se muestra en
+        # vez de resolverse en silencio.
+        vista_consola = consola.leer(ahora=ahora)
+        vista_consola["desacuerdos"] = consola.cotejar(vista_consola, vista_taller)
         datos = {
             "ahora": ahora,
             "cuando": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -126,6 +138,7 @@ def estado():
             # pantalla no los copie.
             "taller": vista_taller,
             "umbrales_taller": {"fresco": taller.FRESCO, "tibio": taller.TIBIO},
+            "consola": vista_consola,
             "refresco_nube": nube.REFRESCO,
             "proyectos": vistas,
             "sin_proyectos": not proyectos,
@@ -201,5 +214,6 @@ if __name__ == "__main__":
     for p in lector.leer_proyectos(PROYECTOS):
         print("    · %-12s %s" % (p["nombre"], p["repo"] or "(sin repo)"))
     print("  Espejos de sólo lectura en: %s" % nube.ESPEJOS)
+    print("  Consola: %s (se apaga con CAPATAZ_CONSOLA=0)" % " ".join(consola.ARGV))
     print("\n  Capataz sólo lee. No marca puntos, no lanza agentes.\n")
     ThreadingHTTPServer(("127.0.0.1", PUERTO), Capataz).serve_forever()

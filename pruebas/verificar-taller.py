@@ -297,6 +297,32 @@ try:
         af("cada sesión real trae sessionId, cwd y un veredicto de si vive",
            not malas, malas)
         todos = [a for s in real["sesiones"] for a in taller._todos(s["agentes"])]
+        # Los subagentes de una sesión **que ya cerró** siguen en disco, y son
+        # los únicos que hay casi siempre: para que `leer()` los devuelva, esa
+        # sesión tiene que estar todavía registrada como viva en `sessions/`,
+        # que es lo raro. Sin esto, la aserción anti-vacua de abajo se ponía
+        # roja según lo que estuviera corriendo en el momento — y una roja que
+        # va y viene sola es la que hace que se deje de mirar el color.
+        #
+        # Los metas se buscan en disco y se leen **con el lector de verdad**,
+        # que es lo que esta sección promete ejercitar.
+        if not todos:
+            for carpeta, dirs, archivos in os.walk(
+                    os.path.join(taller.RAIZ, "projects")):
+                if os.path.basename(carpeta) != "subagents":
+                    continue
+                if not any(a.endswith(".meta.json") for a in archivos):
+                    continue
+                sesion = os.path.basename(os.path.dirname(carpeta))
+                proyecto = os.path.basename(os.path.dirname(os.path.dirname(carpeta)))
+                cwd = proyecto.replace("-", os.sep)
+                arbol, _err = taller.agentes(cwd, sesion)
+                todos = taller._todos(arbol)
+                if todos:
+                    for a in todos:
+                        a["estado"], a["motivo_estado"] = taller.estado_agente(
+                            a, False, HOY)
+                    break
         flojos = [a["id"] for a in todos
                   if not a["tipo"] or not a["descripcion"] or a["profundidad"] is None]
         af("cada agente real trae las cuatro claves que el meta siempre tiene",

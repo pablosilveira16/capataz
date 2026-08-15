@@ -60,6 +60,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import tempfile
 import time
@@ -248,6 +249,57 @@ def _explicar(error, repo, archivo_token):
 # 1 · El espejo
 # ----------------------------------------------------------------------------
 
+# Los archivos —**archivos**, no carpetas— sin los cuales git no reconoce un
+# directorio como repositorio. La distinción es todo el punto del arreglo del
+# 2026-08-15: hasta ese día el espejo se daba por bueno si existía la **carpeta**
+# `objects/`, y eso es exactamente lo que sobrevive al limpiador de temporales
+# de macOS, que borra archivos viejos por antigüedad y deja los directorios
+# vacíos. El resultado medido: los tres espejos con `HEAD`, `config` y
+# `packed-refs` comidos, git contestando «not a git repository» y capataz
+# haciendo `fetch` contra un cadáver **para siempre**, porque la carpeta seguía
+# ahí. El tablero mostraba los tres proyectos ilegibles y el motivo era un
+# gruñido de git que no se entiende.
+ESPEJO_VIVO = ("HEAD", "config")
+
+
+def _es_espejo(destino):
+    """Si esto es un repositorio que git va a reconocer, y no su esqueleto."""
+    return all(os.path.isfile(os.path.join(destino, a)) for a in ESPEJO_VIVO)
+
+
+def _tirar_espejo_roto(destino, base):
+    """Sacar del medio un espejo destripado, para poder volver a clonar.
+
+    **Es el único borrado de capataz**, y llega con la compuerta puesta: la
+    misma de `_git`. `git clone` no escribe adentro de un directorio que no está
+    vacío, así que sin esto un espejo comido por el limpiador de temporales no
+    se recupera nunca — ni reiniciando, porque la carpeta sigue existiendo.
+
+    El T14 dejó escrito que agregar un borrado pide su propia aserción de que no
+    puede apuntar afuera. Ésta es: se verifica que el destino esté adentro de la
+    carpeta de espejos **y** que tenga el nombre que `carpeta_de` genera. Lo que
+    se borra es una copia descartable de capataz; si no lo parece, no se toca
+    nada y se deja que el error viaje, que es peor que arreglarlo y mucho mejor
+    que borrar la carpeta de otro.
+    """
+    # La compuerta va **primero**, antes que cualquier atajo. Escrita al revés
+    # —con el «si no existe, salgo» arriba— un destino de afuera que no existe
+    # se iba por el return sin pasar por ningún control, y el día que existiera
+    # se borraba. Se vio rojo en `verificar-nube.py` § 5c.
+    if not _dentro(destino, base) or os.path.realpath(destino) == os.path.realpath(base):
+        raise FueraDelEspejo(
+            "me pidieron borrar %s, que no es un espejo adentro de %s. Capataz "
+            "no borra nada afuera de sus propias copias descartables." % (destino, base))
+    if not os.path.basename(destino).endswith(".git"):
+        raise FueraDelEspejo(
+            "«%s» no tiene la forma de un espejo de capataz (nombre.git). No se "
+            "borra." % destino)
+    if not os.path.isdir(destino):
+        return False
+    shutil.rmtree(destino, ignore_errors=True)
+    return True
+
+
 def refrescar(repo, base=None, token=None, refresco=None, ahora=None):
     """Traer el espejo al día. Devuelve `(carpeta, error)`.
 
@@ -262,7 +314,8 @@ def refrescar(repo, base=None, token=None, refresco=None, ahora=None):
     refresco = REFRESCO if refresco is None else refresco
     destino = carpeta_de(repo, base)
     marca = os.path.join(destino, "FETCH_HEAD")
-    if not os.path.isdir(os.path.join(destino, "objects")):
+    if not _es_espejo(destino):
+        _tirar_espejo_roto(destino, base)
         if not os.path.isdir(base):
             os.makedirs(base)
         # **`--no-single-branch` no es opcional.** `--depth` lo implica al
@@ -441,7 +494,11 @@ def leer(proy, base=None, token_base=None, ahora=None, refresco=None):
     destino, error = refrescar(repo, base=base, token=archivo_token,
                                refresco=refresco, ahora=ahora)
     vacio["espejo"] = destino
-    hay_espejo = os.path.isdir(os.path.join(destino, "objects"))
+    # Por la misma razón que arriba: que exista la carpeta no es que haya un
+    # espejo. Si acá se preguntara por `objects/`, un esqueleto dejado por el
+    # limpiador de temporales haría que un `fetch` fallado se tomara por «tengo
+    # el de antes» y el error del clon no se mostraría nunca.
+    hay_espejo = _es_espejo(destino)
     if error and not hay_espejo:
         vacio["error"] = _explicar(error, repo, archivo_token)
         return vacio

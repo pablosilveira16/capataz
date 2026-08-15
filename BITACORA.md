@@ -886,3 +886,153 @@ que existe en la Mac** (T24). Los dos están tapados hoy por el llavero de macOS
 que contesta antes que el helper — o sea que la próxima máquina sin llavero se
 va a encontrar con los tres proyectos fallando juntos por una ruta que nadie
 miró.
+
+---
+
+# Tanda 4 · La consola: lo que ni git ni los archivos pueden tener
+
+Pablo pidió **que el panel consuma la vista `claude agents` de consola**. Ese
+pedido ya tenía una respuesta escrita y era «no»: el punto T22 lo había
+rechazado el 2026-08-06 con una medición honesta. La tanda empieza volviendo a
+medir, y termina en el lugar opuesto — pero por un motivo que el T22 no podía
+saber, no porque el T22 estuviera mal.
+
+## La medición que dio vuelta el punto
+
+El T22 decía: para una sesión **interactiva**, `claude agents --json` devuelve
+seis campos y `~/.claude/sessions/<pid>.json` devuelve once. Pagar un
+subproceso para obtener menos que un `open()` no se paga. **Se volvió a medir el
+2026-08-15 y eso sigue siendo cierto** (hoy son doce campos contra seis).
+
+Lo que el T22 dejaba abierto era la puerta: *«el día que se usen agentes en
+background, ese JSON agrega `state` y el `id` para `claude attach`»*. Nadie
+había lanzado uno. Se lanzó:
+
+    claude --bg "contá del 1 al 20, uno por línea, y nada más"
+
+Y ahí aparecieron las dos cosas que cambian el diseño:
+
+- **Vivo**, el CLI trae `id`, `status` y **`state`** — y `state` **no está en el
+  archivo**. Es el campo que dice si el agente trabaja o está trabado. El de la
+  prueba salió `blocked`, porque una sesión background no hereda la sesión de
+  Claude y quedó pidiendo `/login`. O sea que el primer background que corrió en
+  esta máquina fue, sin querer, exactamente el caso que un capataz tiene que
+  poder ver: *un agente que no avanza y necesita a una persona*.
+- **Parado**, `<pid>.json` **desaparece** y sólo `claude agents --json --all` lo
+  conserva, con `state: "stopped"`. Un background terminado no es un dato que
+  `taller.py` lea mal: es un dato que **no puede** leer, porque ya no hay
+  archivo que abrir.
+
+Los seis valores de `state` no se eligieron: dos se vieron en vivo y el resto
+salió del propio binario del CLI, que los lleva como lista literal —
+`"working","blocked","done","stopped","failed"`, más `queued`. Lo que no esté en
+esa lista se muestra **«no sé» con la palabra cruda adentro**.
+
+## El hallazgo que contradice al T19 sin contradecirlo
+
+De un **subagente** no se puede saber si terminó o se colgó: no hay marca de
+cierre en su `.jsonl` (T19), y por eso el taller dice `sin señal`. De un
+**background**, el CLI distingue `done`, `failed` y `stopped` — tres desenlaces.
+Son dos preguntas parecidas con respuestas distintas, y la pantalla dice la que
+corresponde a cada una. La incoherencia aparente está escrita al lado de los
+colores, para que el próximo que la vea no la «arregle».
+
+## Dos fuentes del mismo hecho, y por primera vez hay que escribir la regla
+
+Hasta hoy la regla 1 se cumplía sola: cada módulo contestaba algo que ningún
+otro contestaba. Con la consola aparece solapamiento de verdad — una sesión
+interactiva viva está en el archivo **y** en el CLI —, y «dos lugares con el
+mismo dato y ninguna regla sobre cuál gana» es literalmente el bug más caro de
+Finca 360. Entonces la regla se escribe:
+
+1. Sesión interactiva → **gana el archivo**. La consola ni la muestra.
+2. `state` y background terminado → **sólo la consola**. No hay qué comparar.
+3. Lo que no coincide → **se muestra**. Resolverlo en silencio sería elegir un
+   ganador sin decirlo, que es el bug otra vez.
+
+Y el corolario de la regla 3 obligó a la mitad menos obvia: **declarar los
+desacuerdos que no son desacuerdos**. El archivo escribe `kind: "bg"` y el CLI
+escribe `kind: "background"` para la misma sesión; un background terminado no
+tiene archivo. Si esas dos cosas se reportaran, el aviso saldría en **todas** las
+corridas y enseñaría a ignorarse. Están declaradas y medidas, y el arnés tiene
+una aserción de cada lado: que el aviso salga cuando hay algo, y que no salga
+cuando no.
+
+## Lo que se vio rojo, a propósito
+
+Trece bugs puestos de vuelta, cada uno revertido y confirmado con `diff -q`:
+
+| Bug puesto | Lo que se puso rojo |
+|---|---|
+| La compuerta deja pasar `--agent`, `attach`, `stop`… | 18 rojas |
+| La compuerta corre **después** del `subprocess` | 1, y es la que importa |
+| `stdin` deja de ir a `/dev/null` | 3 — una es un CLI que pide una tecla y cuelga la pantalla 5 s |
+| `leer()` devuelve `ok=True` cuando falla | 3: el «cero agentes» que miente |
+| `bg` deja de ser alias de `background` | 1 |
+| Un `state` que nadie vio se pinta de trabajando | 1 |
+| `cotejar` se calla siempre | 6 |
+| El taller deja de traer la clase cruda | 2 |
+| «esperando» pintado de verde en la pantalla | 1 |
+| La consola sin CLI dice «ningún agente background» | 2 |
+| El espejo se da por bueno si existe `objects/` | 3 |
+| El borrado deja de mirar si el destino es suyo | 1 |
+
+## El bug que encontró la pantalla, no el arnés
+
+A mitad de tanda la suite se puso roja en un lugar inesperado: el arnés de la
+pantalla no encontraba **ningún** proyecto legible. Los tres decían «not a git
+repository», y `verificar-nube.py` seguía en 86 verdes.
+
+`/var/folders/…/T` es temporal de verdad: macOS le borra los archivos viejos por
+antigüedad **y deja los directorios**. Los tres espejos habían quedado con
+`objects/` y `refs/` pero sin `HEAD`, `config` ni `packed-refs`. Y capataz
+decidía «ya está clonado» preguntando si existía la **carpeta** `objects/` — que
+es justo lo que sobrevive—, hacía `fetch` contra el esqueleto y **no se
+recuperaba nunca**, ni reiniciando.
+
+Lo que más vale de esto es por qué el arnés no lo veía: **cada corrida clona en
+un `mkdtemp` nuevo**, o sea siempre en el caso feliz. Un espejo de un día para el
+otro era un camino que ninguna aserción recorría — no una aserción vacua, algo
+más silencioso: un camino que no existía en la prueba. Ahora se reproduce el
+destripe exacto y se exige que capataz se recupere solo.
+
+El arreglo obligó a la primera escritura destructiva del proyecto —`git clone`
+no entra en un directorio que no está vacío—, y llegó con la compuerta que el
+T14 había pedido por escrito. **Y la compuerta encontró un bug en el arreglo**:
+la guarda «si no existe, salgo» estaba arriba de la validación, así que un
+destino de afuera se iba por el `return` sin pasar por ningún control. Es el
+mismo error de orden que el arnés de la consola vigila en `_correr`, escrito por
+la misma mano el mismo día.
+
+## La roja que iba y venía sola
+
+`verificar-taller.py` tenía una aserción anti-vacua —«se encontró al menos un
+agente de verdad»— que dependía de que en ese momento hubiera un subagente
+colgando de una sesión **todavía registrada como viva**. Los metas quedan en
+disco cuando la sesión cierra, pero `leer()` sólo llega a los de las vivas, así
+que la suite quedaba roja o verde según lo que estuviera corriendo. Se midió que
+es anterior a esta tanda: da idéntica con y sin los cambios de la consola. Ahora
+los metas se buscan en disco —18 en 6 carpetas— y se leen con el lector de
+verdad.
+
+## Lo que se miró con los ojos
+
+A 375 px, contra el servidor de verdad: `scrollWidth == clientWidth == 375`,
+cero elementos pasando del ancho, y la tarjeta del background con su asa
+`claude attach 6ced0113` en monoespaciada. Y apareció lo que ningún arnés podía
+ver, porque para él son cadenas: **los backticks salían literales en la
+pantalla** — la misma marca que `taller.py` ya tenía anotada para los
+asteriscos. Cuatro textos reescritos sin markdown.
+
+## El total
+
+**641 aserciones en verde**, cero rojas. Antes de la tanda eran 495. Las nuevas:
+103 de `verificar-consola.py`, 16 de la § 9 de la pantalla, 13 de la § 5c de la
+nube, y el resto son las que ya existían corriendo con los espejos sanos.
+
+Tres de esas 641 no verifican nada nuevo: son las tres filas que esta tanda
+agregó al seguimiento, y `verificar-contrato.sh` cuenta una aserción por fila.
+Es el T8 exactamente, visto otra vez — el número se anotó primero como 638
+mirando la corrida de antes de escribir el cierre, y subió a 641 al escribirlo.
+Mientras el total se mueva con el largo de un archivo de texto, «el total bajó»
+no es una señal limpia.
