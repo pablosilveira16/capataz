@@ -597,6 +597,16 @@ def asociar(maquina, github):
                 fila["motivo_sin_github"] = (
                     "la rama %s no figura por delante de main en GitHub: o no "
                     "empujó todavía, o ya está integrada" % m.get("rama"))
+        # **Quién es**, que es lo que se lee primero. Un `capataz-60` es el
+        # nombre que Claude Code le puso a una sesión; `coder-3` es quien
+        # trabaja. Cuando se pudo asociar, manda el segundo.
+        g = fila.get("github")
+        fila["quien"] = (g or {}).get("quien") or m.get("autor") or \
+            m.get("nombre") or ""
+        # Y el rol: del agente publicado si lo hay, y si no de con qué nombre
+        # commitea la carpeta. De un nombre de persona no sale ninguno, y eso
+        # se muestra como «sin rol» — que también es información.
+        fila["rol"] = (g or {}).get("rol") or rol_de(m.get("autor") or "")
         salida.append(fila)
     # Los que sólo están publicados: otra máquina, un contenedor, o una sesión
     # que ya se cerró. Se muestran igual y se rotulan.
@@ -609,6 +619,7 @@ def asociar(maquina, github):
             "viva": None, "quieto_hace": None, "que": "", "sobre": "",
             "motivo_que": "", "agentes": [], "motivo_sin_agentes": SOLO_PUBLICADO,
             "id": "", "estado_consola": "", "motivo_consola": "",
+            "quien": g.get("quien") or "", "rol": g.get("rol") or "",
             "github": g, "fuente": "github",
         })
     return salida

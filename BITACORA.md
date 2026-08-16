@@ -1396,3 +1396,68 @@ mostrar sola: que las dos fuentes digan cosas **distintas** del mismo campo.
 ## El total
 
 **778 aserciones en verde**, cero rojas. Antes de la tanda eran 729.
+
+---
+
+# Tanda 9 · Tres renglones y un borde de color
+
+> *«la interfaz sigue sin entenderse, es como que tenés que scrollear muchísimo
+> hacia abajo y no se diferencia bien cada agente; lo que tendría que tener como
+> tag fueran son el proyecto y el rol —reviewer, coder, etc.— si aplicase»*
+
+Medido, tenía razón por partida doble. Cada agente era una tarjeta de ocho a
+diez renglones: los chips apilados de a uno, **la ruta entera de un temporal de
+Claude Code ocupando tres líneas** para decir «una carpeta cualquiera», y hasta
+tres párrafos de motivo. En un teléfono eso es scrollear mucho para no
+distinguir a nadie.
+
+Ahora son **tres renglones**: quién con sus dos etiquetas, qué está haciendo con
+hace cuánto, y el contexto —prendida, rama, punto, dónde— en un renglón tenue. Y
+lo que separa un agente del de abajo de un vistazo es **el borde izquierdo de
+color**, no un chip: ámbar el que pide una persona, verde el que se está
+moviendo, apagado el que ya no está.
+
+Entran seis agentes donde entraba uno y medio.
+
+## El rol, y de dónde sale cuando GitHub no lo dice
+
+`lector.rol_de` ya deducía el rol del nombre con que alguien commitea:
+`coder-3` → `coder`. Eso estaba disponible sólo para los agentes **publicados**,
+o sea justo cuando ya no hace falta para saber quién está trabajando ahora.
+
+La carpeta también lo sabe: `.git/config` —741 bytes en el repo más grande de
+acá— dice con qué nombre commitea. Con eso, una sesión que todavía no empujó
+nada igual puede decir de quién es. Y de un nombre de persona no sale ningún
+rol: `Pablo Silveira` se muestra **«sin rol»**, que no es un hueco sino un dato
+—quiere decir que en ese proyecto los agentes no firman con su rol—.
+
+Es el cuarto archivo que `taller.py` abre, y lleva la misma compuerta que el
+tercero: la ruta se arma adentro, así que por más que el `cwd` venga de un
+archivo ajeno, lo que se abre no puede ser otra cosa que `<cwd>/.git/config`.
+
+## El aviso que salía en todas las tarjetas
+
+Contando renglones apareció éste: **«sin subagentes todavía: son cero agentes,
+no un error»** se dibujaba en **todas** las filas, porque casi ninguna sesión
+tiene subagentes en un momento dado. Es exactamente el corolario de la regla 3
+—un aviso que sale siempre enseña a ignorarse—, y estaba escrito por una buena
+razón: distinguir «cero» de «no pude leer». La salida fue dejar que baje sólo
+cuando dice algo que los tres renglones no dicen.
+
+## Y el orden, que se vio mirando
+
+Con la pantalla ya compacta, los dos primeros lugares los ocupaban **dos
+background muertos**, cada uno con cinco renglones de explicación, tapando a los
+tres agentes que sí estaban trabajando. La causa: se ordena poniendo primero al
+que «necesita una persona», y el CLI los daba por `esperando`.
+
+Pero un background del que no queda archivo **no está esperando a nadie** — el
+registro del CLI quedó viejo (T37). Así que los fantasmas van al final aunque el
+CLI diga lo contrario, y su motivo pasó de párrafo a renglón. El porqué largo
+vive en el seguimiento, que es donde se lo busca.
+
+## El total
+
+**788 aserciones en verde**, cero rojas. Antes de la tanda eran 778 — y la de
+diferencia con las 787 que dio antes de escribir esto es la fila nueva de este
+seguimiento, que es el T8 una vez más.

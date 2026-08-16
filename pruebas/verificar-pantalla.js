@@ -646,7 +646,8 @@ conQue.agentes[0].que = "Edit"; conQue.agentes[0].sobre = "lector.py";
 const htmlQ = pintarCon(conTaller([conQue])).taller.innerHTML;
 af("la sesión dice qué herramienta está usando y sobre qué",
    htmlQ.indexOf("Bash") >= 0 && htmlQ.indexOf("Desplegar a QAS") >= 0);
-af("y hace cuánto que no escribe", htmlQ.indexOf("sin escribir") >= 0);
+af("y hace cuánto que no escribe", /class="hace"[\s\S]*?<i>hace/.test(htmlQ),
+   htmlQ.slice(0, 260));
 af("el subagente también dice qué hace",
    htmlQ.indexOf("Edit") >= 0 && htmlQ.indexOf("lector.py") >= 0);
 /* **Que un cambio de herramienta repinte.** Es la aserción que nació de un bug
@@ -723,16 +724,25 @@ const htmlC = p9.taller.innerHTML;
 af("el alcance de la consola está escrito y dice que es esta máquina",
    p9.alcance.textContent.indexOf("esta máquina") >= 0,
    p9.alcance.textContent);
+/* El estado ya no es un chip de color: es **el borde izquierdo de la fila**,
+   que es lo que separa un agente del de abajo de un vistazo. La regla no
+   cambió —lo que pide una persona salta, lo sabido va apagado— y por eso las
+   aserciones siguen siendo las mismas con otra clase. */
 af("«esperando» se pinta ámbar: no está roto, está trabado esperando a alguien",
-   /c-esperando/.test(htmlC));
+   /f-ambar/.test(htmlC), htmlC.slice(0, 200));
 af("y dice cómo se destraba", htmlC.indexOf("necesita a una persona") >= 0);
 af("«no sé» no se pinta de ningún color, y lleva la palabra cruda del CLI",
    /nose/.test(htmlC) && htmlC.indexOf("hibernating") >= 0);
-af("«falló» sí es rojo: eso sí es un incendio", /c-fallo/.test(htmlC));
-af("«terminado» va apagado: es un hecho sabido, no un logro", /c-quieto/.test(htmlC));
+af("«falló» sí es rojo: eso sí es un incendio", /f-rojo/.test(htmlC));
+af("«terminado» va apagado: es un hecho sabido, no un logro",
+   /f-apagado/.test(htmlC));
+af("y el estado se sigue diciendo con todas las letras, no sólo con un color",
+   htmlC.indexOf("terminado") >= 0 && htmlC.indexOf("esperando") >= 0);
 /* La anti-vacua de las cuatro de arriba: sin esto pasarían con una pantalla
    que no pinta de verde nunca. */
-af("y «trabajando» SÍ lleva la clase de trabajando", /c-trabajando/.test(htmlC));
+af("y el que se está moviendo SÍ lleva el borde vivo", /f-verde/.test(
+   pintarCon(conConsola([Object.assign(bg("bx", "trabajando"),
+     { quieto_hace: 0 })])).taller.innerHTML));
 af("el asa para abrirlo se muestra, y es un texto: capataz no lo corre",
    htmlC.indexOf("claude attach b1") >= 0);
 af("el que espera a una persona va primero, antes que el que trabaja",
@@ -744,7 +754,7 @@ af("el que espera a una persona va primero, antes que el que trabaja",
 const viejo = bg("b9", "trabajando");
 viejo.hace = 999999;
 af("un background que arrancó hace un siglo sigue diciendo lo que dice el CLI",
-   /c-trabajando/.test(pintarCon(conConsola([viejo])).taller.innerHTML));
+   pintarCon(conConsola([viejo])).taller.innerHTML.indexOf("trabajando") >= 0);
 
 /* No pude preguntar ≠ no hay ninguno. */
 const p9b = pintarCon(conConsola([], {
@@ -963,8 +973,8 @@ af("justo debajo del umbral, late",
    /class="late"/.test(conLatido(datos.umbrales_taller.latiendo - 1)));
 af("justo encima, no",
    !/class="late"/.test(conLatido(datos.umbrales_taller.latiendo + 1)));
-af("y la que late sigue diciendo que está trabajando: el latido no es un estado",
-   activa.indexOf("r-trabajando") >= 0);
+af("y la que late sigue diciendo que está prendida: el latido no es un estado",
+   activa.indexOf("prendida") >= 0, activa.slice(0, 220));
 
 console.log("\nASERCIONES: " + ASER + "\nROJAS: " + ROJAS);
 process.exit(ROJAS ? 1 : 0);

@@ -259,6 +259,47 @@ nav.principal button[aria-current="page"] { background: var(--fondo-13); color: 
                        margin: 0; }
 .tabbar button { position: relative; }
 
+
+/* ---------------------------------------------------------------------------
+   La fila de un agente: tres renglones y un borde de color
+
+   Antes cada agente era una tarjeta de ocho a diez renglones —chips apilados,
+   la ruta entera del temporal en tres líneas, y hasta tres párrafos de motivo,
+   uno de ellos («sin subagentes todavía») en **todas**—. En un teléfono eso es
+   scrollear muchísimo para no distinguir a nadie.
+
+   Ahora: quién y sus dos etiquetas arriba, qué hace en el medio, el contexto en
+   un renglón tenue, y **el borde izquierdo de color** que es lo que separa uno
+   de otro de un vistazo. Los motivos bajan sólo cuando dicen algo que los tres
+   renglones no dicen.
+--------------------------------------------------------------------------- */
+.fila { border: 1px solid var(--borde-3); border-left-width: 4px;
+        border-radius: 9px; padding: 8px 10px; margin: 7px 0;
+        background: var(--fondo-5); }
+.fila .cab { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.fila .quien { font-size: 15px; }
+.f-verde   { border-left-color: var(--latido); }
+.f-ambar   { border-left-color: var(--marca); }
+.f-rojo    { border-left-color: var(--borde-2); }
+.f-tenue   { border-left-color: var(--borde-8); }
+.f-apagado { border-left-color: var(--borde-11); opacity: .72; }
+
+/* Las dos etiquetas que se leen primero. Chicas, en mayúsculas y juntas: son
+   para reconocer de un vistazo de quién es la fila, no para leerlas. */
+.tag { font: 600 10px/1 -apple-system, BlinkMacSystemFont, sans-serif;
+       text-transform: uppercase; letter-spacing: .5px; padding: 4px 7px;
+       border-radius: 6px; background: var(--fondo-14); color: var(--texto-9);
+       border: 1px solid var(--borde-7); white-space: nowrap; }
+.tag-rol { background: var(--fondo-9); color: var(--texto-10); }
+
+.hace { margin-top: 5px; font-size: 13px; display: flex; flex-wrap: wrap;
+        gap: 6px; align-items: baseline; }
+.hace b { font-size: 13px; white-space: nowrap; }
+.hace span { color: var(--texto-8); }
+.hace i { color: var(--texto-6); font-style: normal; font-size: 11px;
+          margin-left: auto; white-space: nowrap; }
+.ctx { margin-top: 4px; font-size: 11px; color: var(--texto-5); }
+
 /* Sólo una vista a la vez. `hidden` a secas no alcanza: `display:flex` de
    algunos hijos lo pisa. */
 .vista[hidden] { display: none !important; }
@@ -1017,6 +1058,16 @@ function filaSubagente(a) {
   return h + '</div>';
 }
 
+function corto(ruta) {
+  /* Los dos últimos segmentos, y `~` para el home. La ruta entera de un
+     temporal de Claude Code ocupaba **tres renglones** de teléfono para decir
+     «una carpeta cualquiera»; el resto se ve en el título de la ventana de
+     quien la abra. */
+  var partes = String(ruta || "").split("/").filter(function (p) { return p; });
+  if (partes.length <= 2) return ruta;
+  return "…/" + partes.slice(-2).join("/");
+}
+
 function pintarTaller() {
   var cont = document.getElementById("taller");
   var t = (D && D.taller) || null;
@@ -1074,65 +1125,64 @@ function pintarTaller() {
   }
   for (var i = 0; i < filas.length; i++) {
     var s = filas[i];
-    /* El latido va **al lado del nombre**, no adentro del chip de estado: no es
-       un estado, es «se está moviendo ahora». Y el umbral lo manda el servidor,
-       como los otros dos. */
+    /* El latido va **al lado del nombre**: no es un estado, es «se está
+       moviendo ahora». El umbral lo manda el servidor, como los otros dos. */
     var late = D && D.umbrales_taller && s.quieto_hace !== null &&
       s.quieto_hace !== undefined &&
       haceVivo(s.quieto_hace) < D.umbrales_taller.latiendo;
-    h += '<div class="sesion"><div class="cab">' +
+    /* El color del borde izquierdo, que es lo que separa un agente del de
+       abajo de un vistazo. El orden es por **qué hay que hacer**: primero el
+       que pide una persona, después el que se está moviendo. */
+    var color = s.estado_consola === "falló" ? "f-rojo"
+      : s.estado_consola === "esperando" ? "f-ambar"
+      : late ? "f-verde"
+      : s.viva === true ? "f-tenue" : "f-apagado";
+
+    h += '<div class="fila ' + color + '">' +
+      '<div class="cab">' +
       (late ? '<span class="late" title="escribiendo ahora"></span>' : '') +
-      '<b>' + esc(s.nombre || s.sesion) + '</b>' +
-      /* Si vive lo dice el archivo; si no hay archivo, no se afirma. */
-      (s.viva === null || s.viva === undefined
-        ? '<span class="chip nose">no sé si vive</span>'
-        : '<span class="chip ' + (s.viva ? "r-trabajando" : "r-cerrado") + '">' +
-          (s.viva ? "prendida" : "el proceso no está") + '</span>') +
-      /* El estado del CLI, que sólo tienen los background. */
-      (s.estado_consola
-        ? '<span class="chip ' + (CLASE_CONSOLA[s.estado_consola] || "nose") +
-          '">' + esc(s.estado_consola) + '</span>' : '') +
-      '<span class="chip' + (s.proyecto ? '' : ' nose') + '">' +
-      esc(s.proyecto || "carpeta que capataz no vigila") + '</span></div>' +
-      '<div class="tenue">' + esc(s.cwd) + '</div>' +
-      (s.motivo_consola
-        ? '<div class="porque">' + esc(s.motivo_consola) + '</div>' : '') +
-      /* Qué está haciendo, que sale de la cola de su transcripción. Si no se
-         sabe se dice el motivo y **no** se pone nada en su lugar: una sesión
-         que está pensando y una cuya transcripción no aparece son cosas
-         distintas. */
-      (s.que
-        ? '<div class="chips"><span class="chip"><b>' + esc(s.que) + '</b>' +
-          (s.sobre ? esc(s.sobre) : '') + '</span>' +
-          (s.quieto_hace === null || s.quieto_hace === undefined ? '' :
-            '<span class="chip">' + esc(hace(s.quieto_hace)) +
-            ' sin escribir</span>') + '</div>'
-        : (s.motivo_que
-            ? '<div class="porque">' + esc(s.motivo_que) + '</div>' : '')) +
-      /* El asa para abrirlo. Capataz lo escribe y no lo corre. */
-      (s.id ? '<div class="attach">claude attach ' + esc(s.id) + '</div>' : '') +
-      /* Lo que este mismo agente publicó. Si no se lo pudo asociar se dice por
-         qué —no empujó, no es un repo, hay dos en la misma rama— en vez de
-         dejar el hueco: el hueco se lee como «no publicó nada». */
-      (s.github
-        ? '<div class="chips"><span class="chip ' +
-          (CLASE_RAMA[estadoVivo(haceVivo(s.github.hace_seg), s.github.estado)] ||
-           "nose") + '">' + esc(s.github.estado) + '</span>' +
-          '<span class="chip"><b>' + esc(s.rama || s.github.que) + '</b>rama</span>' +
-          (s.github.punto ? '<span class="chip"><b>' + esc(s.github.punto) +
-            '</b>punto</span>' : '') +
-          '<span class="chip">' + esc(hace(haceVivo(s.github.hace_seg))) +
-          ' empujó</span></div>'
-        /* El porqué de no tener GitHub se dice **sólo si tiene carpeta**: en un
-           background muerto —que ya no tiene ni archivo— sumaría un tercer
-           párrafo para decir algo obvio, y tres explicaciones apiladas en un
-           teléfono tapan a los agentes de abajo. Se vio mirando. */
-        : (s.motivo_sin_github && s.cwd && s.fuente !== "cli"
-            ? '<div class="porque">' + esc(s.motivo_sin_github) + '</div>' : ''));
-    if (!(s.agentes || []).length) {
-      h += '<div class="porque">' + esc(s.motivo_sin_agentes ||
-        "sin subagentes") + '</div>';
+      '<b class="quien">' + esc(s.quien || s.nombre || s.sesion) + '</b>' +
+      /* Las dos etiquetas que se leen primero: de qué proyecto es y qué rol
+         tiene. «sin rol» se dibuja como «no sé» y no se esconde: quiere decir
+         que en ese proyecto los agentes no firman con su rol. */
+      '<span class="tag' + (s.proyecto ? '' : ' nose') + '">' +
+      esc(s.proyecto || "sin proyecto") + '</span>' +
+      '<span class="tag' + (s.rol ? ' tag-rol' : ' nose') + '">' +
+      esc(s.rol || "sin rol") + '</span>' +
+      '</div>';
+
+    /* Qué está haciendo, en un renglón. Es lo segundo que se lee. */
+    if (s.que) {
+      h += '<div class="hace"><b>' + esc(s.que) + '</b>' +
+        (s.sobre ? '<span>' + esc(s.sobre) + '</span>' : '') +
+        (s.quieto_hace === null || s.quieto_hace === undefined ? '' :
+          '<i>' + esc(hace(s.quieto_hace)) + '</i>') + '</div>';
     }
+
+    /* El contexto, en un renglón tenue: rama, punto, estado y dónde. Lo que
+       antes ocupaba cinco renglones de chips. */
+    var ctx = [];
+    if (s.viva === true) ctx.push("prendida");
+    else if (s.viva === false) ctx.push("el proceso no está");
+    else if (s.fuente !== "github") ctx.push("no sé si vive");
+    if (s.estado_consola) ctx.push(s.estado_consola);
+    if (s.github) ctx.push(s.github.estado);
+    if (s.rama || (s.github && s.github.que)) ctx.push(s.rama || s.github.que);
+    if (s.github && s.github.punto) ctx.push(s.github.punto);
+    if (s.cwd) ctx.push(corto(s.cwd));
+    h += '<div class="ctx">' + esc(ctx.join(" · ")) + '</div>';
+
+    /* Y abajo, **sólo lo que es un problema**. Antes acá bajaban tres párrafos
+       en cada tarjeta —incluido «sin subagentes todavía», que sale en todas— y
+       eso es el aviso que enseña a ignorarse. Ahora se muestra el motivo del
+       estado sólo cuando dice algo que el renglón de arriba no dice. */
+    if (s.motivo_consola && s.fuente === "cli") {
+      h += '<div class="porque">' + esc(s.motivo_consola) + '</div>';
+    }
+    if (!s.que && s.motivo_que) {
+      h += '<div class="porque">' + esc(s.motivo_que) + '</div>';
+    }
+    if (s.id) h += '<div class="attach">claude attach ' + esc(s.id) + '</div>';
     for (var j = 0; j < (s.agentes || []).length; j++) {
       h += filaSubagente(s.agentes[j]);
     }

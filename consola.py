@@ -457,7 +457,17 @@ def unir(vista_consola, vista_taller):
             "state": b.get("state") or "", "fuente": "cli",
         })
     # Primero el que necesita a una persona, después el que se movió recién.
+    #
+    # **Y los fantasmas al final**, aunque el CLI los dé por «esperando»: un
+    # background del que no queda archivo no está esperando a nadie —el registro
+    # del CLI quedó viejo (T37)— y ponerlo arriba es tapar a los que sí trabajan
+    # con los que ya no existen. Se vio mirando la pantalla: dos agentes muertos
+    # encabezaban la lista con cinco renglones de explicación cada uno.
     def orden(f):
+        fantasma = f.get("fuente") == "cli" and f.get("estado_consola") in (
+            "esperando", "trabajando", "en cola")
+        if fantasma:
+            return (3, 0, f.get("nombre") or "")
         pide = 0 if f.get("estado_consola") in ("esperando", "falló") else 1
         quieto = f.get("quieto_hace")
         return (pide, 10 ** 9 if quieto is None else quieto, f.get("nombre") or "")
@@ -465,11 +475,12 @@ def unir(vista_consola, vista_taller):
     return salida
 
 
+# Un renglón y no un párrafo: al lado de los agentes que sí trabajan, cinco
+# líneas de explicación sobre uno que ya no existe los tapan. El porqué largo
+# vive en el T37 del seguimiento, que es donde se lo busca.
 MOTIVO_VIVO_SIN_ARCHIVO = (
-    "el CLI lo da por «%s» pero de este agente ya no queda ningún archivo en la "
-    "máquina: las dos cosas no pueden ser ciertas. Lo más probable es que el "
-    "proceso haya muerto y el registro del CLI haya quedado viejo — no está "
-    "esperando a nadie")
+    "el CLI lo da por «%s» pero ya no queda ningún archivo suyo: el registro "
+    "quedó viejo, no está esperando a nadie")
 
 SIN_ARCHIVO = (
     "de este agente ya no queda archivo en la máquina: cuando un background "

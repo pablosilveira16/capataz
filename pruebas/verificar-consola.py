@@ -413,7 +413,7 @@ FANTASMA = consola.unir(
     vista_taller([]))
 F0 = FANTASMA[0] if FANTASMA else {}
 af("un background que el CLI da por vivo y no tiene archivo lo dice en su renglón",
-   "no puede" in (F0.get("motivo_consola") or ""), F0.get("motivo_consola"))
+   "quedó viejo" in (F0.get("motivo_consola") or ""), F0.get("motivo_consola"))
 af("y aclara que no está esperando a nadie",
    "no está esperando" in (F0.get("motivo_consola") or ""))
 # Anti-vacua: uno terminado no arrastra esa frase, porque ahí no hay contradicción.
@@ -424,7 +424,7 @@ TERMINADO = consola.unir(
     vista_taller([]))
 T0 = TERMINADO[0] if TERMINADO else {}
 af("y uno terminado no la lleva: ahí las dos fuentes no se contradicen",
-   TERMINADO and "no puede" not in (T0.get("motivo_consola") or ""),
+   bool(TERMINADO) and "quedó viejo" not in (T0.get("motivo_consola") or ""),
    T0.get("motivo_consola"))
 
 CARPETA = consola.cotejar(
@@ -507,16 +507,36 @@ igual("una interactiva queda con la fuente del archivo y nada más",
       (len(SOLA), SOLA[0]["fuente"]), (1, "archivo"))
 af("y sin estado de consola inventado", not SOLA[0].get("estado_consola"))
 
-# El orden: primero el que necesita a una persona.
+# El orden: primero el que necesita a una persona — **entre los que existen**.
 ORDEN = consola.unir(
     vista_consola(background=[
-        {"sesion": SES_A, "cwd": "/p", "nombre": "el-que-trabaja",
-         "clase": "background", "estado": "trabajando", "id": "a"},
-        {"sesion": SES_B, "cwd": "/p", "nombre": "el-trabado",
-         "clase": "background", "estado": "esperando", "id": "b"}]),
-    vista_taller([]))
+        {"sesion": SES_A, "cwd": "/p", "nombre": "x", "clase": "background",
+         "estado": "trabajando", "id": "a"},
+        {"sesion": SES_B, "cwd": "/p", "nombre": "y", "clase": "background",
+         "estado": "esperando", "id": "b"}]),
+    vista_taller([
+        {"sesion": SES_A, "cwd": "/p", "nombre": "el-que-trabaja", "viva": True,
+         "clase": "bg", "pid": 1, "agentes": [], "quieto_hace": 5},
+        {"sesion": SES_B, "cwd": "/p", "nombre": "el-trabado", "viva": True,
+         "clase": "bg", "pid": 2, "agentes": [], "quieto_hace": 5}]))
 igual("primero el que pide una persona, después el que trabaja",
       [f["nombre"] for f in ORDEN], ["el-trabado", "el-que-trabaja"])
+
+# **Y los fantasmas al final, aunque el CLI los dé por «esperando».** Un
+# background del que no queda archivo no está esperando a nadie, y ponerlo
+# arriba tapa a los que sí trabajan con los que ya no existen — se vio mirando
+# la pantalla, con dos agentes muertos encabezando la lista.
+FANTASMAS = consola.unir(
+    vista_consola(background=[
+        {"sesion": SES_C, "cwd": "/p", "nombre": "el-fantasma",
+         "clase": "background", "estado": "esperando", "id": "f"},
+        {"sesion": SES_A, "cwd": "/p", "nombre": "x", "clase": "background",
+         "estado": "trabajando", "id": "a"}]),
+    vista_taller([{"sesion": SES_A, "cwd": "/p", "nombre": "el-vivo",
+                   "viva": True, "clase": "bg", "pid": 1, "agentes": [],
+                   "quieto_hace": 5}]))
+igual("el que ya no tiene archivo va al final, aunque diga «esperando»",
+      [f["nombre"] for f in FANTASMAS], ["el-vivo", "el-fantasma"])
 
 af("si el taller no se pudo leer, unir no inventa: devuelve lo que había",
    consola.unir(vista_consola(background=[{"sesion": SES_A, "estado": "x"}]),

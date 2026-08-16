@@ -189,11 +189,11 @@ try:
     # de `~/.claude`**, y por eso tiene su propia compuerta: la ruta se arma
     # acá, así que por más que el `cwd` venga de un archivo ajeno, lo que se
     # abre no puede ser otra cosa.
-    igual("taller.py abre archivos en exactamente tres lugares",
-          nombres.count("io.open"), 3)
+    igual("taller.py abre archivos en exactamente cuatro lugares",
+          nombres.count("io.open"), 4)
     funciones = {n.name: n for n in ast.walk(arbol)
                  if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
-    for cual in ("_abrir", "_cola", "rama_de"):
+    for cual in ("_abrir", "_cola", "rama_de", "autor_de"):
         af("«%s» existe" % cual, cual in funciones)
         adentro = [nombre_de(n) for n in ast.walk(funciones[cual])
                    if isinstance(n, ast.Call)]
@@ -537,6 +537,22 @@ try:
     igual("apuntar a un archivo suelto no lo lee: la ruta se arma acá",
           taller.rama_de(SECRETO_FALSO), "")
     igual("ni apuntando a /etc", taller.rama_de("/etc"), "")
+
+    # El autor, que es de donde sale el rol. Mismo archivo, misma compuerta.
+    with io.open(os.path.join(REPO, ".git", "config"), "w", encoding="utf-8") as f:
+        f.write("[core]\n\tbare = false\n[user]\n\tname = coder-7\n"
+                "\temail = x@y.z\n[remote \"origin\"]\n\turl = https://x/y\n")
+    igual("de .git/config sale con qué nombre commitea esa carpeta",
+          taller.autor_de(REPO), "coder-7")
+    igual("una carpeta sin config no inventa autor",
+          taller.autor_de(os.path.join(FALSO, "no-existe")), "")
+    igual("y apuntar a un archivo suelto tampoco lo lee",
+          taller.autor_de(SECRETO_FALSO), "")
+    # Y la deducción que hace que esto sirva: de ese nombre sale el rol.
+    import lector as _lector  # noqa: E402
+    igual("y de ese nombre se deduce el rol", _lector.rol_de("coder-7"), "coder")
+    igual("de un nombre de persona no se deduce ninguno",
+          _lector.rol_de("Pablo Silveira"), "")
 
     # Y contra las carpetas **de verdad**: al menos una sesión de esta máquina
     # tiene que decir en qué rama está, o esto no verifica nada.

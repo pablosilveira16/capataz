@@ -395,6 +395,38 @@ def rama_de(cwd):
     return limpiar_secreto(m.group(1))[:120] if m else ""
 
 
+# El nombre con el que esa carpeta commitea. Sale de `.git/config` —741 bytes en
+# el repo más grande de acá— y de él `lector.rol_de` deduce el rol: `coder-3` →
+# `coder`. Es lo que hace que una sesión que todavía no empujó nada igual pueda
+# decir de quién es; sin esto, el rol sólo aparecía después de asociarse con
+# GitHub, o sea justo cuando ya no hace falta para saber quién está trabajando.
+TOPE_CONFIG = 64 * 1024
+_AUTOR = re.compile(r"(?ms)^\s*\[user\][^\[]*?^\s*name\s*=\s*(.+?)\s*$")
+
+
+def autor_de(cwd):
+    """Con qué nombre commitea esa carpeta. `""` si no se puede saber.
+
+    Misma compuerta que `rama_de`: la ruta se arma acá —`<cwd>/.git/config` y
+    nada más—, así que por más que el `cwd` venga de un archivo ajeno, lo que se
+    abre no puede ser otra cosa. Sólo lectura, y sin correr git.
+    """
+    if not cwd or not os.path.isabs(cwd):
+        return ""
+    ruta = os.path.join(cwd, ".git", "config")
+    if not ruta.endswith(os.path.join(".git", "config")):
+        return ""
+    try:
+        if not os.path.isfile(ruta) or os.path.getsize(ruta) > TOPE_CONFIG:
+            return ""
+        with io.open(ruta, encoding="utf-8", errors="replace") as f:
+            texto = f.read(TOPE_CONFIG)
+    except OSError:
+        return ""
+    m = _AUTOR.search(texto)
+    return limpiar_secreto(m.group(1))[:60] if m else ""
+
+
 def _vive(pid):
     """Si el proceso existe. `None` cuando no se puede saber.
 
@@ -490,6 +522,8 @@ def sesiones(raiz=None, ahora=None):
             # La rama de la carpeta: la llave que asocia esta sesión con su
             # renglón en la vista de GitHub.
             "rama": rama_de(d.get("cwd") or ""),
+            # Con qué nombre commitea esa carpeta: de ahí sale el rol.
+            "autor": autor_de(d.get("cwd") or ""),
             "arrancada": arrancada / 1000.0 if isinstance(arrancada, (int, float)) else None,
             "version": d.get("version") or "",
             "entrada": d.get("entrypoint") or "",
