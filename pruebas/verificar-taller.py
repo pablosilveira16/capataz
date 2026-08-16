@@ -183,11 +183,17 @@ try:
     # —y que el arnés cuente exactamente dos— es lo que permite decir en una
     # línea qué abre cada una; con los dos adentro de la misma, «capataz lee la
     # cola y nada más» sería un comentario en vez de una afirmación.
-    igual("taller.py abre archivos en exactamente dos lugares",
-          nombres.count("io.open"), 2)
+    # **Tres, y se sabe cuál es cada uno.** El tercero llegó el 2026-08-15 con
+    # `rama_de`, que lee `<cwd>/.git/HEAD` —21 a 34 bytes— para saber en qué
+    # rama trabaja una sesión. Es el **único archivo que este módulo abre fuera
+    # de `~/.claude`**, y por eso tiene su propia compuerta: la ruta se arma
+    # acá, así que por más que el `cwd` venga de un archivo ajeno, lo que se
+    # abre no puede ser otra cosa.
+    igual("taller.py abre archivos en exactamente tres lugares",
+          nombres.count("io.open"), 3)
     funciones = {n.name: n for n in ast.walk(arbol)
                  if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
-    for cual in ("_abrir", "_cola"):
+    for cual in ("_abrir", "_cola", "rama_de"):
         af("«%s» existe" % cual, cual in funciones)
         adentro = [nombre_de(n) for n in ast.walk(funciones[cual])
                    if isinstance(n, ast.Call)]
@@ -494,6 +500,52 @@ try:
             af("_cola tendría que rechazar %s (%s)" % (malo, porque), False)
         except taller.FueraDelTaller:
             af("_cola rechaza lo que %s" % porque, True)
+
+    # -----------------------------------------------------------------------
+    # La rama: 34 bytes que asocian esta sesión con su renglón en GitHub
+    # -----------------------------------------------------------------------
+    #
+    # Es el único archivo que este módulo abre fuera de `~/.claude`, así que lo
+    # que hay que verificar es sobre todo **qué NO abre**: la ruta se arma acá
+    # y no puede terminar en otra cosa que `<cwd>/.git/HEAD`.
+    REPO = os.path.join(FALSO, "un-repo")
+    os.makedirs(os.path.join(REPO, ".git"), exist_ok=True)
+    with io.open(os.path.join(REPO, ".git", "HEAD"), "w", encoding="utf-8") as f:
+        f.write("ref: refs/heads/t10-mirar-la-nube\n")
+    igual("de .git/HEAD sale el nombre de la rama", taller.rama_de(REPO),
+          "t10-mirar-la-nube")
+
+    # Un HEAD desprendido trae un sha, y **un sha no es una rama**: se dice que
+    # no se sabe en vez de poner cuarenta caracteres de hexadecimal en un
+    # teléfono.
+    with io.open(os.path.join(REPO, ".git", "HEAD"), "w", encoding="utf-8") as f:
+        f.write("9f1c0a2b3d4e5f60718293a4b5c6d7e8f9012345\n")
+    igual("un HEAD desprendido no se muestra como rama", taller.rama_de(REPO), "")
+
+    # Y lo que no se puede leer no inventa nada.
+    igual("una carpeta que no es repositorio da vacío",
+          taller.rama_de(os.path.join(FALSO, "no-existe")), "")
+    igual("una ruta relativa no se lee", taller.rama_de("relativa/de/mentira"), "")
+    igual("y un cwd vacío tampoco", taller.rama_de(""), "")
+
+    # La compuerta que importa: apuntarle **a un archivo** no lo abre, porque la
+    # ruta se arma acá. Sin esto, un `cwd` de un archivo ajeno sería una lectura
+    # arbitraria del disco.
+    SECRETO_FALSO = os.path.join(FALSO, "parece-un-secreto")
+    with io.open(SECRETO_FALSO, "w", encoding="utf-8") as f:
+        f.write("ref: refs/heads/esto-no-tiene-que-salir\n")
+    igual("apuntar a un archivo suelto no lo lee: la ruta se arma acá",
+          taller.rama_de(SECRETO_FALSO), "")
+    igual("ni apuntando a /etc", taller.rama_de("/etc"), "")
+
+    # Y contra las carpetas **de verdad**: al menos una sesión de esta máquina
+    # tiene que decir en qué rama está, o esto no verifica nada.
+    reales = [s for s in taller.leer()["sesiones"] if s.get("rama")]
+    af("al menos una sesión real dice en qué rama trabaja", len(reales) >= 1,
+       "ninguna: sin esto, la asociación con GitHub no se puede verificar")
+    af("y ninguna rama real trae un salto de línea o un `ref:` sin parsear",
+       all("\n" not in s["rama"] and not s["rama"].startswith("ref")
+           for s in reales), [s["rama"] for s in reales])
 
     # Contra las transcripciones **de verdad** de esta máquina, que es la lección
     # que dejó `nube.py`: un lector probado sólo contra archivos que él mismo

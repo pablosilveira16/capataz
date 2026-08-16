@@ -69,6 +69,7 @@ Sin dependencias: sólo biblioteca estándar. → `pruebas/verificar-taller.py`
 import io
 import json
 import os
+import re
 import time
 
 from nube import limpiar_secreto
@@ -348,6 +349,52 @@ def que_hace(transcripcion, raiz=None):
     return "", "", MOTIVO_SIN_COLA % (COLA_BYTES // 1024)
 
 
+# ----------------------------------------------------------------------------
+# 1c · En qué rama trabaja — 34 bytes, y sin correr git
+# ----------------------------------------------------------------------------
+#
+# Es la **llave** que asocia una sesión de esta máquina con su renglón en la
+# vista de GitHub: allá los agentes son ramas por delante de `main`, y acá una
+# sesión es una carpeta. Lo que las une es en qué rama está parada esa carpeta,
+# y ese dato no está en ninguna de las dos fuentes: está en el disco.
+#
+# Medido el 2026-08-15: `.git/HEAD` pesa entre 21 y 34 bytes y dice
+# `ref: refs/heads/<rama>`. **No hace falta correr git**, que además está
+# prohibido fuera del espejo (`nube._git`).
+TOPE_HEAD = 4 * 1024
+
+# Lo único que se acepta de ahí: el nombre de una rama. Un `HEAD` desprendido
+# trae un sha y eso **no es una rama**, así que se dice que no se sabe en vez de
+# mostrar cuarenta caracteres de hexadecimal en un teléfono.
+_RAMA = re.compile(r"^ref:\s*refs/heads/(.+?)\s*$")
+
+
+def rama_de(cwd):
+    """La rama en la que está parada esa carpeta. `""` si no se puede saber.
+
+    **Este es el único archivo que este módulo abre fuera de `~/.claude`**, y
+    por eso tiene su propia compuerta en vez de pasar por `_abrir`: la ruta se
+    arma acá —`<cwd>/.git/HEAD` y nada más—, así que por más que `cwd` venga de
+    un archivo de otro, lo que se abre no puede ser otra cosa. Sigue siendo sólo
+    lectura y sigue sin correr nada.
+    """
+    if not cwd or not os.path.isabs(cwd):
+        return ""
+    ruta = os.path.join(cwd, ".git", "HEAD")
+    if os.path.basename(ruta) != "HEAD" or not ruta.endswith(
+            os.path.join(".git", "HEAD")):
+        return ""
+    try:
+        if not os.path.isfile(ruta) or os.path.getsize(ruta) > TOPE_HEAD:
+            return ""
+        with io.open(ruta, encoding="utf-8", errors="replace") as f:
+            cabeza = f.read(TOPE_HEAD)
+    except OSError:
+        return ""
+    m = _RAMA.match(cabeza.strip())
+    return limpiar_secreto(m.group(1))[:120] if m else ""
+
+
 def _vive(pid):
     """Si el proceso existe. `None` cuando no se puede saber.
 
@@ -440,6 +487,9 @@ def sesiones(raiz=None, ahora=None):
             # sería tapar la diferencia justo donde `consola.cotejar` tiene que
             # poder verla; el alias se declara en un solo lugar y es suyo.
             "clase": d.get("kind") or "",
+            # La rama de la carpeta: la llave que asocia esta sesión con su
+            # renglón en la vista de GitHub.
+            "rama": rama_de(d.get("cwd") or ""),
             "arrancada": arrancada / 1000.0 if isinstance(arrancada, (int, float)) else None,
             "version": d.get("version") or "",
             "entrada": d.get("entrypoint") or "",

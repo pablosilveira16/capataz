@@ -388,18 +388,44 @@ igual("un background terminado sin archivo es lo **esperado**, no un desacuerdo"
       MUERTO, [])
 
 # --- Lo que SÍ es un desacuerdo -----------------------------------------
-VIVO_SIN_ARCHIVO = consola.cotejar(
+# **Que una fuente lo tenga y la otra no ya no se reporta acá.** Desde que las
+# dos secciones se unieron, ese agente se dibuja igual —en su renglón, marcado
+# `fuente: cli` y con «no sé si vive»—, así que el aviso sería decir dos veces
+# lo mismo. Y como un background muerto se queda en el CLI para siempre (T37),
+# saldría en todas las corridas: el aviso que enseña a ignorarse.
+SOLO_EN_CLI = consola.cotejar(
     vista_consola(interactivas=[{"sesion": SES_A, "cwd": "/p", "nombre": "n",
                                  "clase": "interactive"}]),
     vista_taller([]))
-igual("una sesión viva que el taller no tiene, se reporta", len(VIVO_SIN_ARCHIVO), 1)
-# Indexado con guarda: con el bug de «cotejar se calla siempre» puesto, esto
-# reventaba con IndexError y el arnés se moría **antes** de las secciones 5 y 6.
-# Un arnés que se cae no dice cuántas rojas hay, dice cero aserciones — y la
-# diferencia entre las dos cosas es lo que `verificar.sh` mira.
-af("y dice de qué lado está el dato",
-   bool(VIVO_SIN_ARCHIVO) and "consola" in VIVO_SIN_ARCHIVO[0]
-   and "taller" in VIVO_SIN_ARCHIVO[0])
+igual("que sólo lo tenga una fuente no es un desacuerdo: lo dice el renglón",
+      SOLO_EN_CLI, [])
+# Y lo mismo del otro lado.
+igual("ni al revés", consola.cotejar(
+    vista_consola(),
+    vista_taller([{"sesion": SES_A, "cwd": "/p", "clase": "interactive",
+                   "viva": True, "pid": 1}])), [])
+# Pero el renglón **sí** tiene que decirlo, y con la contradicción escrita: un
+# background que el CLI da por vivo y del que no queda archivo es el T37.
+FANTASMA = consola.unir(
+    vista_consola(background=[{"sesion": SES_A, "cwd": "/p", "nombre": "n",
+                               "clase": "background", "estado": "esperando",
+                               "id": "z9"}]),
+    vista_taller([]))
+F0 = FANTASMA[0] if FANTASMA else {}
+af("un background que el CLI da por vivo y no tiene archivo lo dice en su renglón",
+   "no puede" in (F0.get("motivo_consola") or ""), F0.get("motivo_consola"))
+af("y aclara que no está esperando a nadie",
+   "no está esperando" in (F0.get("motivo_consola") or ""))
+# Anti-vacua: uno terminado no arrastra esa frase, porque ahí no hay contradicción.
+TERMINADO = consola.unir(
+    vista_consola(background=[{"sesion": SES_B, "cwd": "/p", "nombre": "n",
+                               "clase": "background", "estado": "terminado",
+                               "id": "z8", "motivo_estado": "terminó solo"}]),
+    vista_taller([]))
+T0 = TERMINADO[0] if TERMINADO else {}
+af("y uno terminado no la lleva: ahí las dos fuentes no se contradicen",
+   TERMINADO and "no puede" not in (T0.get("motivo_consola") or ""),
+   T0.get("motivo_consola"))
 
 CARPETA = consola.cotejar(
     vista_consola(interactivas=[{"sesion": SES_A, "cwd": "/uno", "nombre": "n",
@@ -418,20 +444,101 @@ CLASE = consola.cotejar(
                    "pid": 1}]))
 igual("una clase que no es alias de la otra se reporta", len(CLASE), 1)
 
-TALLER_SOLO = consola.cotejar(
-    vista_consola(),
-    vista_taller([{"sesion": SES_A, "cwd": "/p", "clase": "interactive",
-                   "viva": True, "pid": 1}]))
-igual("una sesión que el taller ve viva y el CLI no lista, se reporta",
-      len(TALLER_SOLO), 1)
-af("y la muerta del taller no se reporta: el CLI no tiene por qué listarla",
-   consola.cotejar(vista_consola(),
-                   vista_taller([{"sesion": SES_A, "cwd": "/p", "viva": False,
-                                  "clase": "interactive", "pid": 1}])) == [])
-
 af("si alguna de las dos fuentes no se pudo leer, no se coteja nada",
    consola.cotejar({"ok": False, "interactivas": [], "background": []},
                    vista_taller([{"sesion": SES_A, "viva": True}])) == [])
+
+
+# ---------------------------------------------------------------------------
+print("\n§ 4b · Unir: un renglón por agente, y el archivo gana lo compartido")
+# ---------------------------------------------------------------------------
+#
+# La pantalla tenía dos secciones, una por fuente, y el **mismo** agente salía
+# dibujado en las dos. `unir` las junta por `sessionId`. Lo que hay que
+# verificar no es que junte: es **que no tape**. Juntar mal es elegir un ganador
+# sin decirlo, que es el bug de la regla 1 con otra cara.
+
+DOS = consola.unir(
+    vista_consola(background=[{"sesion": SES_A, "cwd": "/lo-que-dice-el-cli",
+                               "nombre": "el-del-cli", "clase": "background",
+                               "estado": "esperando", "id": "abc123",
+                               "state": "blocked", "motivo_estado": "trabado"}]),
+    vista_taller([{"sesion": SES_A, "cwd": "/lo-que-dice-el-archivo",
+                   "nombre": "el-del-archivo", "clase": "bg", "viva": True,
+                   "pid": 7, "agentes": [{"id": "sub1", "hijos": []}],
+                   "que": "Bash", "quieto_hace": 3}]))
+igual("un agente que está en las dos fuentes es **un** renglón", len(DOS), 1)
+igual("y lo compartido lo pone el archivo, que trae el doble de campos",
+      (DOS[0]["cwd"], DOS[0]["nombre"]),
+      ("/lo-que-dice-el-archivo", "el-del-archivo"))
+igual("el `id` para `claude attach` lo pone el CLI, que es el único que lo tiene",
+      DOS[0]["id"], "abc123")
+igual("y el `state`, también", DOS[0]["estado_consola"], "esperando")
+igual("el renglón dice de qué fuentes salió", DOS[0]["fuente"], "archivo+cli")
+af("y no se le perdieron los subagentes por el camino",
+   len(DOS[0]["agentes"]) == 1, DOS[0]["agentes"])
+af("ni lo que está haciendo", DOS[0]["que"] == "Bash")
+
+SOLO_CLI = consola.unir(
+    vista_consola(background=[{"sesion": SES_C, "cwd": "/p", "nombre": "terminado",
+                               "clase": "background", "estado": "terminado",
+                               "id": "c1", "state": "done"}]),
+    vista_taller([]))
+igual("un background sin archivo entra igual: es el dato que sólo tiene el CLI",
+      len(SOLO_CLI), 1)
+# Indexado con guarda: con el bug de «unir se olvida de los sin archivo»
+# puesto, esto reventaba y el arnés moría antes de las secciones de abajo. Un
+# arnés que se cae no dice cuántas rojas hay: dice cero aserciones.
+UNO = SOLO_CLI[0] if SOLO_CLI else {}
+igual("marcado como tal", UNO.get("fuente"), "cli")
+igual("y **no se afirma** si su proceso vive: no hay con qué saberlo",
+      UNO.get("viva"), None)
+af("con el motivo de por qué no tiene subagentes",
+   "ya no queda archivo" in (UNO.get("motivo_sin_agentes") or ""),
+   UNO.get("motivo_sin_agentes"))
+
+# Una sesión interactiva no la toca el CLI: ahí el archivo manda entero.
+SOLA = consola.unir(
+    vista_consola(interactivas=[{"sesion": SES_B, "cwd": "/p", "nombre": "i",
+                                 "clase": "interactive"}]),
+    vista_taller([{"sesion": SES_B, "cwd": "/p", "nombre": "i", "viva": True,
+                   "clase": "interactive", "pid": 3, "agentes": []}]))
+igual("una interactiva queda con la fuente del archivo y nada más",
+      (len(SOLA), SOLA[0]["fuente"]), (1, "archivo"))
+af("y sin estado de consola inventado", not SOLA[0].get("estado_consola"))
+
+# El orden: primero el que necesita a una persona.
+ORDEN = consola.unir(
+    vista_consola(background=[
+        {"sesion": SES_A, "cwd": "/p", "nombre": "el-que-trabaja",
+         "clase": "background", "estado": "trabajando", "id": "a"},
+        {"sesion": SES_B, "cwd": "/p", "nombre": "el-trabado",
+         "clase": "background", "estado": "esperando", "id": "b"}]),
+    vista_taller([]))
+igual("primero el que pide una persona, después el que trabaja",
+      [f["nombre"] for f in ORDEN], ["el-trabado", "el-que-trabaja"])
+
+af("si el taller no se pudo leer, unir no inventa: devuelve lo que había",
+   consola.unir(vista_consola(background=[{"sesion": SES_A, "estado": "x"}]),
+                {"ok": False, "sesiones": []}) == [])
+
+# Y contra las dos fuentes **de verdad**: ningún agente puede salir dos veces,
+# que es exactamente el bug que esta función vino a matar.
+if CLAUDE:
+    UNIDA = consola.unir(VISTA, VT)
+    IDS = [f["sesion"] for f in UNIDA if f["sesion"]]
+    igual("contra las fuentes reales, ningún sessionId sale dos veces",
+          sorted(set(IDS)), sorted(IDS))
+    af("y están todas las sesiones del taller",
+       all(s["sesion"] in IDS for s in VT.get("sesiones", []) if s.get("sesion")))
+    af("más los background que ya no tienen archivo",
+       len(UNIDA) >= len(VT.get("sesiones", [])),
+       (len(UNIDA), len(VT.get("sesiones", []))))
+    # Anti-vacua: si no hubiera ningún background, todo lo de arriba pasaría
+    # igual con un `unir` que devuelve las sesiones tal cual.
+    af("y hay al menos un background de verdad que unir (si no, esto no mira nada)",
+       len(VISTA["background"]) >= 1,
+       "no hay ninguno: lanzá uno con `claude --bg` para que esto verifique algo")
 
 
 # ---------------------------------------------------------------------------

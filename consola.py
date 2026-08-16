@@ -384,6 +384,99 @@ def leer(argv=None, ahora=None, refresco=None):
 # 4 · Cotejar — el desacuerdo se muestra, no se resuelve en silencio
 # ----------------------------------------------------------------------------
 
+def unir(vista_consola, vista_taller):
+    """Los agentes de esta máquina, **un renglón por agente**.
+
+    Hasta el 2026-08-15 la pantalla tenía dos secciones, una por fuente: «el
+    taller» con lo que sale de los archivos y «la consola» con lo que sale del
+    CLI. Medido con un background vivo, el **mismo** agente salía dibujado en
+    las dos —sesión por archivo y background por CLI— y sus subagentes colgaban
+    sólo de la primera. Eso es la regla 1 puesta en la pantalla: el mismo hecho
+    en dos lugares, y el que mira adivinando que son el mismo.
+
+    Las secciones estaban partidas **por fuente**, y una pantalla se parte por
+    **pregunta**. La pregunta acá es una sola: quién está trabajando en esta
+    máquina. Así que se juntan por `sessionId`, y la regla de cuál gana es la
+    que ya estaba escrita arriba:
+
+      · lo que comparten —nombre, carpeta, si vive— lo pone **el archivo**, que
+        trae el doble de campos;
+      · el `state` y el `id` para `claude attach` los pone **el CLI**, porque no
+        están en ningún archivo;
+      · un background que ya terminó **sólo** está en el CLI: su archivo se
+        borró, y entra igual, marcado.
+
+    Cada renglón dice de qué fuente salió (`fuente`), que es lo que evita que
+    unir se convierta en tapar: si mañana las dos discrepan, `cotejar` lo sigue
+    diciendo aparte.
+    """
+    if not vista_taller.get("ok"):
+        return list(vista_taller.get("sesiones", []))
+    por_cli = {}
+    if vista_consola.get("ok"):
+        for b in vista_consola.get("background", []):
+            if b.get("sesion"):
+                por_cli[b["sesion"]] = b
+    salida = []
+    vistos = set()
+    for s in vista_taller.get("sesiones", []):
+        fila = dict(s)
+        fila["fuente"] = "archivo"
+        b = por_cli.get(s.get("sesion"))
+        if b:
+            vistos.add(s["sesion"])
+            # Del CLI entra **sólo lo que el archivo no tiene**. Copiar encima
+            # lo compartido sería elegir un ganador distinto del escrito.
+            fila["id"] = b.get("id") or ""
+            fila["estado_consola"] = b.get("estado") or ""
+            fila["motivo_consola"] = b.get("motivo_estado") or ""
+            fila["state"] = b.get("state") or ""
+            fila["fuente"] = "archivo+cli"
+        salida.append(fila)
+    # Y los que el archivo ya no puede tener.
+    for sesion, b in por_cli.items():
+        if sesion in vistos:
+            continue
+        salida.append({
+            "sesion": sesion, "pid": b.get("pid"), "nombre": b.get("nombre") or "",
+            "cwd": b.get("cwd") or "", "clase": "background", "viva": None,
+            "arrancada": b.get("arrancada"), "quieto_hace": None,
+            "que": "", "sobre": "", "motivo_que": "",
+            "agentes": [], "motivo_sin_agentes": SIN_ARCHIVO,
+            "proyecto": "", "error": "",
+            "id": b.get("id") or "", "estado_consola": b.get("estado") or "",
+            # **El caso del T37, dicho en el renglón y no en un aviso aparte.**
+            # Si el CLI lo da por vivo —trabado, trabajando, en cola— y de él no
+            # queda ningún archivo, las dos cosas no pueden ser ciertas a la
+            # vez. Antes eso salía como un banner que, por venir de un registro
+            # que el CLI no limpia nunca, aparecía en todas las corridas.
+            "motivo_consola": (MOTIVO_VIVO_SIN_ARCHIVO % b.get("estado")
+                               if b.get("estado") in ("esperando", "trabajando",
+                                                      "en cola")
+                               else b.get("motivo_estado") or ""),
+            "state": b.get("state") or "", "fuente": "cli",
+        })
+    # Primero el que necesita a una persona, después el que se movió recién.
+    def orden(f):
+        pide = 0 if f.get("estado_consola") in ("esperando", "falló") else 1
+        quieto = f.get("quieto_hace")
+        return (pide, 10 ** 9 if quieto is None else quieto, f.get("nombre") or "")
+    salida.sort(key=orden)
+    return salida
+
+
+MOTIVO_VIVO_SIN_ARCHIVO = (
+    "el CLI lo da por «%s» pero de este agente ya no queda ningún archivo en la "
+    "máquina: las dos cosas no pueden ser ciertas. Lo más probable es que el "
+    "proceso haya muerto y el registro del CLI haya quedado viejo — no está "
+    "esperando a nadie")
+
+SIN_ARCHIVO = (
+    "de este agente ya no queda archivo en la máquina: cuando un background "
+    "termina, su registro se borra y lo único que lo recuerda es el CLI. Por eso "
+    "no tiene subagentes acá, ni se puede decir si su proceso vive")
+
+
 def cotejar(vista_consola, vista_taller):
     """Dónde las dos fuentes dicen cosas distintas del **mismo** hecho.
 
@@ -418,16 +511,16 @@ def cotejar(vista_consola, vista_taller):
         vistas_por_cli.add(c["sesion"])
         t = por_sesion.get(c["sesion"])
         if t is None:
-            # Un background terminado no tiene archivo, y eso está medido: no
-            # es un desacuerdo. Uno **vivo** que el taller no ve, sí lo es.
-            if c.get("estado") in ("terminado", "falló", "parado"):
-                continue
-            desacuerdos.append({
-                "sesion": c["sesion"],
-                "que": "la consola la ve y el taller no",
-                "consola": "%s · %s" % (c["clase"], c["nombre"] or c["cwd"]),
-                "taller": "no hay archivo de esta sesión en ~/.claude/sessions",
-            })
+            # **Que una fuente lo tenga y la otra no ya no se reporta acá**, y
+            # es consecuencia de unir las dos secciones en una: ese agente ahora
+            # se dibuja igual, en su propio renglón, marcado `fuente: cli` y con
+            # «no sé si vive». Repetirlo como aviso sería decir dos veces lo
+            # mismo — y como un background muerto se queda en el CLI para
+            # siempre (T37), ese aviso saldría en **todas** las corridas: el que
+            # enseña a ignorarse, corolario de la regla 3.
+            #
+            # Lo que sí queda acá es lo que la pantalla no puede mostrar sola:
+            # que las dos digan cosas **distintas** del mismo campo.
             continue
         if c["cwd"] and t.get("cwd") and c["cwd"] != t["cwd"]:
             desacuerdos.append({
@@ -438,12 +531,4 @@ def cotejar(vista_consola, vista_taller):
             desacuerdos.append({
                 "sesion": c["sesion"], "que": "la clase de sesión no coincide",
                 "consola": c["clase"], "taller": clase_taller})
-    for s in vista_taller.get("sesiones", []):
-        if s.get("viva") and s.get("sesion") and s["sesion"] not in vistas_por_cli:
-            desacuerdos.append({
-                "sesion": s["sesion"],
-                "que": "el taller la ve viva y la consola no la lista",
-                "consola": "no aparece en `claude agents --json --all`",
-                "taller": "pid %s vivo · %s" % (s.get("pid"), s.get("nombre") or s.get("cwd")),
-            })
     return desacuerdos

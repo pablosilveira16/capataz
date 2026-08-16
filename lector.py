@@ -538,6 +538,88 @@ def agentes(vistas, ahora=None):
                                         a["hace_seg"] if a["hace_seg"] is not None else 0))
 
 
+def asociar(maquina, github):
+    """Una sola lista de agentes: los de esta máquina, con lo suyo de GitHub.
+
+    Es el tercer paso de la misma idea. Primero se unieron las dos fuentes
+    locales —archivos y CLI— porque dibujaban el mismo agente dos veces
+    (`consola.unir`). Después Pablo vio que **también la vista de GitHub es del
+    mismo agente**: el que trabaja en esta máquina es el que empuja esa rama.
+
+    La llave es `(proyecto, rama)`. La rama de una sesión no está ni en
+    `~/.claude` ni en GitHub: sale de `<cwd>/.git/HEAD`, que es el archivo que
+    dice en qué rama está parada esa carpeta (`taller.rama_de`).
+
+    **Lo que no empata no se fuerza.** Un agente que publicó desde otra máquina
+    —o desde un contenedor— no tiene sesión acá, y queda como su propio renglón
+    rotulado. Asociar por parecido sería adivinar, y un tablero que adivina en el
+    caso que importa es el que no se mira más.
+
+    Esta función es **pura**: recibe las dos listas ya armadas y no toca disco ni
+    red, como todo el resto de este archivo.
+    """
+    por_llave = {}
+    for g in github or ():
+        llave = ((g.get("proyecto") or "").lower(), (g.get("que") or "").lower())
+        if llave[1]:
+            por_llave.setdefault(llave, []).append(g)
+    salida = []
+    usados = set()
+    for m in maquina or ():
+        fila = dict(m)
+        llave = ((m.get("proyecto") or "").lower(), (m.get("rama") or "").lower())
+        candidatos = por_llave.get(llave) or []
+        # Se asocia **sólo si no hay ambigüedad**: dos agentes publicando en la
+        # misma rama del mismo proyecto no se pueden distinguir desde acá, y
+        # elegir uno sería inventar. Con más de uno se dice y no se asocia.
+        if len(candidatos) == 1 and llave[1]:
+            g = candidatos[0]
+            usados.add(id(g))
+            fila["github"] = g
+            fila["fuente"] = (fila.get("fuente") or "archivo") + "+github"
+        elif len(candidatos) > 1:
+            fila["github"] = None
+            fila["motivo_sin_github"] = (
+                "hay %d agentes publicando en la rama %s de %s: desde acá no se "
+                "puede saber cuál es éste, y elegir uno sería inventarlo"
+                % (len(candidatos), m.get("rama"), m.get("proyecto")))
+        else:
+            fila["github"] = None
+            if not m.get("rama"):
+                fila["motivo_sin_github"] = (
+                    "esta carpeta no es un repositorio git, o su HEAD está "
+                    "desprendido: sin rama no hay con qué asociarlo a lo publicado")
+            elif not m.get("proyecto"):
+                fila["motivo_sin_github"] = (
+                    "esta carpeta no es de ninguno de los proyectos vigilados, "
+                    "así que no hay con qué comparar lo publicado")
+            else:
+                fila["motivo_sin_github"] = (
+                    "la rama %s no figura por delante de main en GitHub: o no "
+                    "empujó todavía, o ya está integrada" % m.get("rama"))
+        salida.append(fila)
+    # Los que sólo están publicados: otra máquina, un contenedor, o una sesión
+    # que ya se cerró. Se muestran igual y se rotulan.
+    for g in github or ():
+        if id(g) in usados:
+            continue
+        salida.append({
+            "sesion": "", "nombre": g.get("quien") or "", "cwd": "",
+            "proyecto": g.get("proyecto") or "", "rama": g.get("que") or "",
+            "viva": None, "quieto_hace": None, "que": "", "sobre": "",
+            "motivo_que": "", "agentes": [], "motivo_sin_agentes": SOLO_PUBLICADO,
+            "id": "", "estado_consola": "", "motivo_consola": "",
+            "github": g, "fuente": "github",
+        })
+    return salida
+
+
+SOLO_PUBLICADO = (
+    "de este agente sólo se sabe lo que publicó: no hay ninguna sesión suya en "
+    "esta máquina. Puede estar corriendo en otra, en un contenedor, o haber "
+    "terminado hace rato")
+
+
 # ----------------------------------------------------------------------------
 # 4 · El CI
 # ----------------------------------------------------------------------------

@@ -117,6 +117,18 @@ def estado():
         # vez de resolverse en silencio.
         vista_consola = consola.leer(ahora=ahora)
         vista_consola["desacuerdos"] = consola.cotejar(vista_consola, vista_taller)
+        # **Un renglón por agente, no uno por fuente.** Las dos secciones que
+        # había —una por archivo y otra por CLI— dibujaban el mismo agente dos
+        # veces: la pantalla estaba partida por de dónde sale el dato en vez de
+        # por qué pregunta contesta.
+        vista_taller["agentes_maquina"] = consola.unir(vista_consola, vista_taller)
+        # Y el tercer paso: lo publicado en GitHub **también es del mismo
+        # agente**. Se asocia por `(proyecto, rama)`, con la rama que sale de
+        # `<cwd>/.git/HEAD`. Lo que no empata —otra máquina, un contenedor— queda
+        # como su propio renglón y rotulado, en vez de forzarlo.
+        agentes_github = lector.agentes(vistas, ahora)
+        agentes_todos = lector.asociar(vista_taller["agentes_maquina"],
+                                       agentes_github)
         datos = {
             "ahora": ahora,
             "cuando": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -126,7 +138,9 @@ def estado():
             # La vista primaria: la cuadrilla de todos los proyectos junta y
             # ordenada por quién se movió recién. Va arriba de `proyectos`
             # porque es lo que se mira, no un resumen de lo de abajo.
-            "agentes": lector.agentes(vistas, ahora),
+            "agentes": agentes_github,
+            # La lista única: una pantalla de agentes, y los proyectos aparte.
+            "agentes_todos": agentes_todos,
             # Los umbrales viajan **una vez y desde acá**. La pantalla vuelve a
             # decidir el estado a cada segundo, y si los copiara tendría los
             # mismos dos números en dos lugares sin ninguna regla sobre cuál

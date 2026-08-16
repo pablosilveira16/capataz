@@ -1315,3 +1315,84 @@ las dos animaciones con el mismo nombre.
 **729 aserciones en verde**, cero rojas. Antes de la tanda eran 699. Las tres
 de diferencia con las 726 que dio antes de escribir este capítulo son las tres
 filas nuevas del seguimiento — el T8 otra vez.
+
+---
+
+# Tanda 8 · Un agente, un renglón
+
+Dos observaciones de Pablo, una atrás de la otra, y las dos son la misma:
+
+> *«los subagentes del CLI son de un agente que también está por archivo, hay
+> que asociar eso»*
+>
+> *«lo de hoy también se termina asociando al mismo agente, a menos que sea de
+> otra máquina; como trabajo mayoritariamente en mi máquina, capaz debería
+> colapsar todo a una sola pantalla de agentes y la segunda ya es de proyectos»*
+
+La pantalla estaba partida **por fuente**: una sección por archivos, una por
+CLI, una por GitHub. Y las tres hablaban del mismo agente. Medido con un
+background vivo: `6de93760` salía dibujado dos veces, y sus subagentes colgaban
+sólo de una. Es la regla 1 puesta en la pantalla — el mismo hecho en dos
+lugares, y el que mira adivinando que son el mismo.
+
+**Una pantalla se parte por pregunta, no por fuente.** Y acá la pregunta es una
+sola: quién está trabajando. Quedaron dos vistas: agentes y proyectos.
+
+## Las dos llaves
+
+Juntar archivos y CLI fue directo: comparten `sessionId`. La regla de cuál gana
+ya estaba escrita del lado del CLI, así que `unir` sólo la aplica — lo
+compartido lo pone el archivo, el `state` y el `id` los pone el CLI, y un
+background sin archivo entra igual porque es el dato que sólo el CLI tiene.
+
+Juntar eso con GitHub costó encontrar una llave. Allá los agentes son **ramas**
+por delante de `main`; acá una sesión es una **carpeta**. Lo que las une es en
+qué rama está parada esa carpeta, y ese dato no está en ninguna de las dos
+fuentes: está en `<cwd>/.git/HEAD`, **21 a 34 bytes** que dicen
+`ref: refs/heads/<rama>` sin correr git —que además está prohibido fuera del
+espejo—. Con eso, `capataz-60` quedó asociado a `coder-3 · T10`: la sesión que
+escribe esto y el agente que empuja esa rama son el mismo, y ahora se ven como
+uno.
+
+## Lo que no se asocia, que es lo que hace que asociar sirva
+
+Asociar de más es atribuirle a uno el trabajo de otro, y eso **no se nota
+mirando**. Por eso:
+
+- misma rama y otro proyecto: no;
+- mismo proyecto y otra rama: no;
+- **dos candidatos para la misma llave: no se elige ninguno**, y se dice por
+  qué. Elegir uno sería inventarlo.
+
+Y lo que no empata se muestra igual, rotulado «sólo publicado — sin sesión en
+esta máquina», que es el caso del agente que corre en otra máquina.
+
+## Lo que el rojo destapó, y es lo que más vale de la tanda
+
+Se pusieron cinco bugs de vuelta. Dos se pusieron rojos. **Tres no**, y no
+porque las aserciones fueran malas: porque **`asociar` y `rama_de` no tenían
+ninguna**. Código nuevo, con reglas finas, y cero aserciones — la suite entera
+en verde no decía nada de ellos.
+
+Se escribieron las dos secciones que faltaban, y ahí sí: 3, 5 y 2 rojas.
+
+El otro hallazgo: tres arneses **se caían** con el bug puesto, en vez de
+reportar. Un arnés que revienta no dice «una roja», dice **cero aserciones**, y
+lo único que se ve es que el total bajó. Los indexados quedaron con guarda.
+
+## El aviso que la fusión volvió permanente
+
+`cotejar` reportaba «la consola la ve y el taller no». Con las secciones
+unidas, ese agente **ya se dibuja igual**, en su renglón, marcado `fuente: cli`
+y con «no sé si vive». O sea que el aviso pasó a decir dos veces lo mismo — y
+como un background muerto se queda en el CLI para siempre (T37), iba a salir en
+**todas** las corridas: el aviso que enseña a ignorarse.
+
+Se sacó de `cotejar` y se dice en el renglón, con la contradicción escrita: *el
+CLI lo da por «esperando» pero de este agente ya no queda ningún archivo; no
+está esperando a nadie*. `cotejar` quedó para lo que la pantalla no puede
+mostrar sola: que las dos fuentes digan cosas **distintas** del mismo campo.
+
+## El total
+
+**778 aserciones en verde**, cero rojas. Antes de la tanda eran 729.

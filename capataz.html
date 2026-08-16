@@ -481,23 +481,15 @@ details p { font-size: 11px; color: var(--texto-2); margin: 5px 0 0; }
       <!-- Las cuatro vistas. La primera es la consola: es lo que se pidió y es
            también lo único de la pantalla que puede pedir que alguien vaya a
            hacer algo ahora mismo. -->
-      <section class="vista" data-vista="consola">
-        <h3>Agentes background</h3>
-        <div class="tenue" id="alcance-consola">…</div>
-        <div id="consola"></div>
-      </section>
-
-      <section class="vista" data-vista="taller" hidden>
-        <h3>El taller</h3>
+      <!-- **Una sola pantalla de agentes.** Antes eran tres secciones, una
+           por fuente: archivos, CLI y GitHub. Las tres hablaban del mismo
+           agente —el que trabaja acá es el que empuja esa rama— y el que
+           miraba tenía que asociarlas de memoria. Una pantalla se parte por
+           pregunta, y acá la pregunta es una sola: quién está trabajando. -->
+      <section class="vista" data-vista="agentes">
+        <h3>Agentes</h3>
         <div class="tenue" id="alcance">…</div>
         <div id="taller"></div>
-      </section>
-
-      <section class="vista" data-vista="agentes" hidden>
-        <h3>Agentes ahora</h3>
-        <div class="tenue">Sale de GitHub: quién tiene una rama por delante de
-          <code>main</code>. Un agente que empuja derecho a <code>main</code> no
-          aparece acá — el taller sí lo ve, si corre en esta máquina.</div>
         <div id="agentes"></div>
       </section>
 
@@ -785,7 +777,6 @@ var VISTOS = null;      /* sha por agente en la lectura anterior */
 var DESPIERTOS = {};    /* clave -> hasta cuándo mostrar que se despertó */
 var FIRMA = "";
 var FIRMA_TALLER = "";
-var FIRMA_CONSOLA = "";
 var LATE = false;
 var ESTATICA = false;
 var SIN_CONTACTO = 10;  /* segundos sin respuesta para dejar de creerle a la pantalla */
@@ -841,16 +832,30 @@ function filaAgente(a) {
 }
 
 function pintarAgentes() {
+  /* Sólo los que no tienen sesión acá. Los demás ya se dibujaron arriba, con lo
+     suyo de GitHub adentro del mismo renglón: dibujarlos dos veces es el bug
+     que esta tanda vino a arreglar. */
+  var soloPublicados = ((D && D.agentes_todos) || [])
+    .filter(function (f) { return f.fuente === "github"; })
+    .map(function (f) { return f.github; });
   var cont = document.getElementById("agentes");
-  var ag = (D && D.agentes) || [];
+  var ag = soloPublicados.length || !(D && D.agentes_todos)
+    ? soloPublicados : [];
+  if (!(D && D.agentes_todos)) ag = (D && D.agentes) || [];
   if (!ag.length) {
-    cont.innerHTML = '<div class="nada">ninguna rama con trabajo sin integrar ' +
-      'y ningún punto en curso: nadie trabajando</div>';
+    /* Cero acá **no** es «nadie trabajando»: quiere decir que todo lo publicado
+       ya está asociado a un agente de esta máquina, arriba. Decir «nadie» sería
+       mentir justo cuando el tablero está completo. */
+    cont.innerHTML = '<div class="nada">ningún agente publicando desde otra ' +
+      'máquina: todo lo que hay en GitHub ya está asociado a un agente de acá</div>';
     return;
   }
+  cont.innerHTML = '<div class="tenue" style="margin:14px 0 4px">Sólo publicados ' +
+    '— sin sesión en esta máquina</div>';
+  var previo = cont.innerHTML;
   var h = "";
   for (var i = 0; i < ag.length; i++) h += filaAgente(ag[i]);
-  cont.innerHTML = h;
+  cont.innerHTML = previo + h;
 }
 
 /* Cada segundo: los contadores y el estado, sin tocar el resto del DOM. Volver
@@ -1015,6 +1020,7 @@ function filaSubagente(a) {
 function pintarTaller() {
   var cont = document.getElementById("taller");
   var t = (D && D.taller) || null;
+  var c = (D && D.consola) || null;
   document.getElementById("alcance").textContent =
     t ? t.alcance : "esta máquina · ahora";
   if (!t) { cont.innerHTML = ""; return; }
@@ -1025,15 +1031,49 @@ function pintarTaller() {
       '<div class="tenue">' + esc(t.error) + '</div></div>';
     return;
   }
-  if (!t.sesiones.length) {
-    cont.innerHTML = '<div class="nada">ninguna sesión de Claude Code abierta ' +
-      'en esta máquina. Los agentes de otra máquina no se ven acá: eso lo ' +
-      'contesta GitHub, arriba</div>';
+  var h = "";
+
+  /* **Media vista que no se pudo leer se dice antes de dibujar la otra media.**
+     Si el CLI no contesta, de los agentes background no se sabe nada — y sin
+     este aviso la lista de abajo se leería como si fueran todos los que hay,
+     que es la regla 3 rota justo donde el que mira no tiene cómo notarlo. */
+  if (c && !c.ok) {
+    h += '<div class="tarjeta"><h2>De los agentes background no sé</h2>' +
+      '<div class="tenue">' + esc(c.error) + '</div>' +
+      '<div class="porque">Lo de abajo sale de los archivos de la máquina y se ' +
+      'lee igual.</div></div>';
+  }
+
+  /* El desacuerdo entre las dos fuentes, cuando lo hay. Unir no es tapar: si
+     las dos hablan del mismo agente y no coinciden, se muestra. */
+  for (var k = 0; k < ((c && c.desacuerdos) || []).length; k++) {
+    var da = c.desacuerdos[k];
+    h += '<div class="desacuerdo"><b>Las dos fuentes no dicen lo mismo: ' +
+      esc(da.que) + '</b>' +
+      '<div class="lado">consola · ' + esc(da.consola) + '</div>' +
+      '<div class="lado">taller · ' + esc(da.taller) + '</div>' +
+      '<div class="porque">sesión ' + esc(da.sesion) + '. Capataz no elige un ' +
+      'ganador: para lo que comparten manda el archivo, y esto es algo que esa ' +
+      'regla no explica.</div></div>';
+  }
+
+  /* Un renglón por agente, con lo de las dos fuentes ya asociado por
+     `sessionId`. `agentes_maquina` lo arma el servidor: la pantalla no vuelve a
+     decidir qué fuente gana — eso está escrito en un solo lugar. */
+  /* De la lista única, las de esta máquina. Las que sólo están publicadas las
+     dibuja `pintarAgentes()` abajo, en la misma vista y con la tarjeta que ya
+     estaba probada. */
+  var todos = (D && D.agentes_todos) || [];
+  var filas = todos.filter(function (f) { return f.fuente !== "github"; });
+  if (!todos.length) filas = t.agentes_maquina || t.sesiones || [];
+  if (!filas.length) {
+    cont.innerHTML = h + '<div class="nada">ningún agente de Claude Code en ' +
+      'esta máquina. Los de otra máquina no se ven acá: eso lo contesta ' +
+      'GitHub, en la otra pestaña</div>';
     return;
   }
-  var h = "";
-  for (var i = 0; i < t.sesiones.length; i++) {
-    var s = t.sesiones[i];
+  for (var i = 0; i < filas.length; i++) {
+    var s = filas[i];
     /* El latido va **al lado del nombre**, no adentro del chip de estado: no es
        un estado, es «se está moviendo ahora». Y el umbral lo manda el servidor,
        como los otros dos. */
@@ -1042,12 +1082,21 @@ function pintarTaller() {
       haceVivo(s.quieto_hace) < D.umbrales_taller.latiendo;
     h += '<div class="sesion"><div class="cab">' +
       (late ? '<span class="late" title="escribiendo ahora"></span>' : '') +
-      '<b>' + esc(s.nombre || s.sesion) +
-      '</b><span class="chip ' + (s.viva ? "r-trabajando" : "r-cerrado") + '">' +
-      (s.viva ? "prendida" : "el proceso no está") + '</span>' +
+      '<b>' + esc(s.nombre || s.sesion) + '</b>' +
+      /* Si vive lo dice el archivo; si no hay archivo, no se afirma. */
+      (s.viva === null || s.viva === undefined
+        ? '<span class="chip nose">no sé si vive</span>'
+        : '<span class="chip ' + (s.viva ? "r-trabajando" : "r-cerrado") + '">' +
+          (s.viva ? "prendida" : "el proceso no está") + '</span>') +
+      /* El estado del CLI, que sólo tienen los background. */
+      (s.estado_consola
+        ? '<span class="chip ' + (CLASE_CONSOLA[s.estado_consola] || "nose") +
+          '">' + esc(s.estado_consola) + '</span>' : '') +
       '<span class="chip' + (s.proyecto ? '' : ' nose') + '">' +
       esc(s.proyecto || "carpeta que capataz no vigila") + '</span></div>' +
       '<div class="tenue">' + esc(s.cwd) + '</div>' +
+      (s.motivo_consola
+        ? '<div class="porque">' + esc(s.motivo_consola) + '</div>' : '') +
       /* Qué está haciendo, que sale de la cola de su transcripción. Si no se
          sabe se dice el motivo y **no** se pone nada en su lugar: una sesión
          que está pensando y una cuya transcripción no aparece son cosas
@@ -1058,12 +1107,35 @@ function pintarTaller() {
           (s.quieto_hace === null || s.quieto_hace === undefined ? '' :
             '<span class="chip">' + esc(hace(s.quieto_hace)) +
             ' sin escribir</span>') + '</div>'
-        : '<div class="porque">' + esc(s.motivo_que || "") + '</div>');
-    if (!s.agentes.length) {
+        : (s.motivo_que
+            ? '<div class="porque">' + esc(s.motivo_que) + '</div>' : '')) +
+      /* El asa para abrirlo. Capataz lo escribe y no lo corre. */
+      (s.id ? '<div class="attach">claude attach ' + esc(s.id) + '</div>' : '') +
+      /* Lo que este mismo agente publicó. Si no se lo pudo asociar se dice por
+         qué —no empujó, no es un repo, hay dos en la misma rama— en vez de
+         dejar el hueco: el hueco se lee como «no publicó nada». */
+      (s.github
+        ? '<div class="chips"><span class="chip ' +
+          (CLASE_RAMA[estadoVivo(haceVivo(s.github.hace_seg), s.github.estado)] ||
+           "nose") + '">' + esc(s.github.estado) + '</span>' +
+          '<span class="chip"><b>' + esc(s.rama || s.github.que) + '</b>rama</span>' +
+          (s.github.punto ? '<span class="chip"><b>' + esc(s.github.punto) +
+            '</b>punto</span>' : '') +
+          '<span class="chip">' + esc(hace(haceVivo(s.github.hace_seg))) +
+          ' empujó</span></div>'
+        /* El porqué de no tener GitHub se dice **sólo si tiene carpeta**: en un
+           background muerto —que ya no tiene ni archivo— sumaría un tercer
+           párrafo para decir algo obvio, y tres explicaciones apiladas en un
+           teléfono tapan a los agentes de abajo. Se vio mirando. */
+        : (s.motivo_sin_github && s.cwd && s.fuente !== "cli"
+            ? '<div class="porque">' + esc(s.motivo_sin_github) + '</div>' : ''));
+    if (!(s.agentes || []).length) {
       h += '<div class="porque">' + esc(s.motivo_sin_agentes ||
         "sin subagentes") + '</div>';
     }
-    for (var j = 0; j < s.agentes.length; j++) h += filaSubagente(s.agentes[j]);
+    for (var j = 0; j < (s.agentes || []).length; j++) {
+      h += filaSubagente(s.agentes[j]);
+    }
     h += '</div>';
   }
   cont.innerHTML = h;
@@ -1088,59 +1160,6 @@ var CLASE_CONSOLA = {
   "no sé": "nose"
 };
 
-function pintarConsola() {
-  var cont = document.getElementById("consola");
-  var c = (D && D.consola) || null;
-  document.getElementById("alcance-consola").textContent =
-    c ? c.alcance : "esta máquina · ahora";
-  if (!c) { cont.innerHTML = ""; return; }
-  /* No haber podido preguntar y que no haya ninguno son cosas distintas, y la
-     que se borra siempre es la primera: sin el CLI la sección diría «ningún
-     agente background», que es exactamente la mentira de la regla 3. */
-  if (!c.ok) {
-    cont.innerHTML = '<div class="tarjeta"><h2>La consola no se pudo leer</h2>' +
-      '<div class="tenue">' + esc(c.error) + '</div>' +
-      '<div class="porque">Lo demás de esta pantalla no depende de esto: los ' +
-      'proyectos salen de GitHub y el taller, de los archivos.</div></div>';
-    return;
-  }
-  var h = "";
-  for (var i = 0; i < (c.desacuerdos || []).length; i++) {
-    var d = c.desacuerdos[i];
-    h += '<div class="desacuerdo"><b>Las dos fuentes no dicen lo mismo: ' +
-      esc(d.que) + '</b>' +
-      '<div class="lado">consola · ' + esc(d.consola) + '</div>' +
-      '<div class="lado">taller · ' + esc(d.taller) + '</div>' +
-      '<div class="porque">sesión ' + esc(d.sesion) + '. Capataz no elige un ' +
-      'ganador: para una sesión interactiva manda el archivo, y esto es algo ' +
-      'que esa regla no explica.</div></div>';
-  }
-  if (!c.background.length) {
-    cont.innerHTML = h + '<div class="nada">ningún agente background. Se ' +
-      'lanzan con <code>claude --bg</code>; las sesiones interactivas están ' +
-      'arriba, en el taller, que de cada una sabe el doble</div>';
-    return;
-  }
-  for (var j = 0; j < c.background.length; j++) {
-    var b = c.background[j];
-    h += '<div class="sesion"><div class="cab"><b>' +
-      esc(b.nombre || b.sesion) + '</b>' +
-      '<span class="chip ' + (CLASE_CONSOLA[b.estado] || "nose") + '">' +
-      esc(b.estado) + '</span>' +
-      (b.hace === null || b.hace === undefined ? '' :
-        '<span class="chip"><b>' + esc(hace(b.hace)) + '</b>arrancó</span>') +
-      '</div>' +
-      '<div class="tenue">' + esc(b.cwd) + '</div>' +
-      (b.motivo_estado ? '<div class="porque">' + esc(b.motivo_estado) +
-        '</div>' : '') +
-      /* El `id` corto se muestra porque es el asa: con él una persona abre la
-         sesión desde su terminal. Capataz lo escribe y no lo corre — la regla 1
-         no es que no exista el comando, es que no lo ejecuta capataz. */
-      (b.id ? '<div class="attach">claude attach ' + esc(b.id) + '</div>' : '') +
-      '</div>';
-  }
-  cont.innerHTML = h;
-}
 
 /* ---------------------------------------------------------------------------
    El menú, y la marca que hace que una pestaña no esconda nada.
@@ -1158,10 +1177,11 @@ function pintarConsola() {
    así que marcar por eso sería prender las cuatro pestañas en todas las
    corridas — el aviso que enseña a ignorarse, corolario de la regla 3.
 --------------------------------------------------------------------------- */
+/* Tres, y los nombres dicen **de dónde sale cada una**, que es la distinción
+   que costó entender cuando eran cuatro: el taller es esta máquina ahora mismo,
+   GitHub es lo que quedó publicado, y los proyectos contestan cómo va cada uno. */
 var VISTAS = [
-  { clave: "consola",   rotulo: "Consola",   icono: "◆" },
-  { clave: "taller",    rotulo: "Taller",    icono: "◈" },
-  { clave: "agentes",   rotulo: "Agentes",   icono: "◉" },
+  { clave: "agentes",   rotulo: "Agentes",   icono: "◈" },
   { clave: "proyectos", rotulo: "Proyectos", icono: "▦" }
 ];
 /* La consola primero, y es una decisión: es lo único de la pantalla que puede
@@ -1175,25 +1195,24 @@ var VISTA = VISTAS[0].clave;
 
 function problemasDe(d, clave) {
   if (!d) return 0;
-  if (clave === "consola") {
-    var c = d.consola;
-    if (!c) return 0;
-    if (!c.ok) return 1;
-    return (c.background || []).filter(function (b) {
-      /* `esperando` es un agente trabado que necesita a una persona, y `falló`
-         terminó con error. Los otros cuatro estados no marcan: un background
-         `terminado` o `parado` es un hecho, no un pendiente. */
-      return b.estado === "esperando" || b.estado === "falló";
-    }).length;
-  }
-  if (clave === "taller") return (d.taller && !d.taller.ok) ? 1 : 0;
   if (clave === "agentes") {
-    /* `sin rama` es un `en curso (fulano)` del que no llegó ni un commit: algo
-       que no cierra. `caído` NO marca — es el estado más común de este
-       tablero. */
-    return (d.agentes || []).filter(function (a) {
-      return a.estado === "sin rama";
-    }).length;
+    /* La pestaña de agentes cubre ahora las **tres** fuentes, porque la vista
+       las unió. Marca si alguna no se pudo leer, si hay un agente trabado, y si
+       hay un `sin rama` —un `en curso (fulano)` del que no llegó ni un commit—.
+       No marcan los estados normales: un background `terminado` es un hecho, y
+       `caído` es el estado más común de este tablero. */
+    var n = 0;
+    if (d.taller && !d.taller.ok) n += 1;
+    if (d.consola && !d.consola.ok) n += 1;
+    var filas = (d.agentes_todos && d.agentes_todos.length)
+      ? d.agentes_todos
+      : ((d.taller && d.taller.agentes_maquina) || []);
+    for (var i = 0; i < filas.length; i++) {
+      var f = filas[i];
+      if (f.estado_consola === "esperando" || f.estado_consola === "falló") n += 1;
+      if (f.github && f.github.estado === "sin rama") n += 1;
+    }
+    return n;
   }
   if (clave === "proyectos") {
     return (d.proyectos || []).filter(function (p) {
@@ -1353,23 +1372,22 @@ function pintar(d) {
      agente hacía hace media hora. Se vio mirando el navegador: forzar
      `pintarTaller()` a mano lo dibujaba bien. Sigue sin mirar el reloj: el
      `mtime` cambia cada dos segundos y eso haría parpadear la sección entera. */
-  var firmaT = JSON.stringify((d.taller && d.taller.sesiones || []).map(
-    function (s) {
-      return [s.sesion, s.viva, s.proyecto, s.que, s.sobre,
-        (s.agentes || []).map(function f(a) {
-          return [a.id, a.estado, a.que, a.sobre, (a.hijos || []).map(f)];
-        })];
-    })) + "|" + ((d.taller && d.taller.ok) ? "ok" : (d.taller && d.taller.error));
+  /* Una sola firma, porque ahora es una sola sección. Mira la lista **ya
+     unida** —que es la que se dibuja—, más el estado de la consola y los
+     desacuerdos, que también se pintan ahí. Sigue sin mirar el reloj: el
+     `mtime` cambia cada dos segundos y eso haría parpadear la sección entera. */
+  var firmaT = JSON.stringify(
+    ((d.taller && (d.taller.agentes_maquina || d.taller.sesiones)) || []).map(
+      function (s) {
+        return [s.sesion, s.viva, s.proyecto, s.que, s.sobre, s.estado_consola,
+          s.fuente, (s.agentes || []).map(function f(a) {
+            return [a.id, a.estado, a.que, a.sobre, (a.hijos || []).map(f)];
+          })];
+      })) + "|" +
+    ((d.taller && d.taller.ok) ? "ok" : (d.taller && d.taller.error)) + "|" +
+    ((d.consola && d.consola.ok) ? "ok" : (d.consola && d.consola.error)) + "|" +
+    JSON.stringify((d.consola && d.consola.desacuerdos) || []);
   if (firmaT !== FIRMA_TALLER) { FIRMA_TALLER = firmaT; pintarTaller(); }
-
-  /* La firma de la consola ignora el reloj por lo mismo que la del taller: si
-     mirara `hace`, un background trabajando repintaría la sección entera cada
-     dos segundos. Mira quién está, en qué estado, y si hay desacuerdos. */
-  var firmaC = JSON.stringify((d.consola && d.consola.background || []).map(
-    function (b) { return [b.sesion, b.estado, b.id]; })) + "|" +
-    JSON.stringify(d.consola && d.consola.desacuerdos || []) + "|" +
-    ((d.consola && d.consola.ok) ? "ok" : (d.consola && d.consola.error));
-  if (firmaC !== FIRMA_CONSOLA) { FIRMA_CONSOLA = firmaC; pintarConsola(); }
 
   var h = "";
   if (d.sin_proyectos) {

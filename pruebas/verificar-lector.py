@@ -602,5 +602,76 @@ mudos = [p["nombre"] for p in reales if not p["repo"] and not p["motivo_sin_repo
 af("cada proyecto declara un repo o declara por qué no lo tiene (%d proyectos)"
    % len(reales), reales and not mudos, mudos)
 
+print("\n§ 8 · Asociar: el agente de esta máquina y el que publicó son uno")
+# ---------------------------------------------------------------------------
+#
+# Tercer paso de la misma idea: primero se unieron archivos y CLI, después se
+# vio que **lo publicado también es del mismo agente**. La llave es
+# `(proyecto, rama)`. Lo que hay que verificar no es que junte —eso es fácil—
+# sino **que no adivine**: asociar de más es un tablero que atribuye el trabajo
+# de uno a otro, y eso no se nota mirando.
+
+MAQ = [{"sesion": "s1", "nombre": "capataz-60", "proyecto": "Capataz",
+        "rama": "t10-mirar-la-nube", "fuente": "archivo", "agentes": []}]
+GIT = [{"quien": "coder-3", "proyecto": "Capataz", "que": "t10-mirar-la-nube",
+        "punto": "T10", "estado": "trabajando", "hace_seg": 60},
+       {"quien": "otro", "proyecto": "ERP 360", "que": "otra-rama",
+        "punto": "", "estado": "caído", "hace_seg": 9000}]
+
+A = lector.asociar(MAQ, GIT)
+igual("la sesión y su rama publicada quedan en un solo renglón", len(A), 2)
+# Indexado con guarda en todo el bloque: con un bug puesto estas listas quedan
+# cortas y el arnés se caía **antes** de reportar la roja. Cero aserciones y
+# «una roja» son cosas distintas, y la que sirve es la segunda.
+A0 = A[0] if A else {}
+A1 = A[1] if len(A) > 1 else {}
+igual("y el renglón de la máquina se queda con lo suyo de GitHub",
+      (A0.get("nombre"), (A0.get("github") or {}).get("quien")),
+      ("capataz-60", "coder-3"))
+igual("marcado en la fuente", A0.get("fuente"), "archivo+github")
+igual("el que publicó desde otro lado queda aparte y rotulado",
+      (A1.get("fuente"), A1.get("nombre")), ("github", "otro"))
+af("con el motivo de que puede estar en otra máquina",
+   "otra" in (A1.get("motivo_sin_agentes") or ""), A1.get("motivo_sin_agentes"))
+
+# **Lo que no se debe asociar.** Cada uno de estos tres pasaría desapercibido si
+# la función se quedara con «parecido»: mismo proyecto y distinta rama, misma
+# rama y distinto proyecto, y dos candidatos para la misma llave.
+def primero(lista):
+    return lista[0] if lista else {}
+
+
+igual("misma rama pero otro proyecto: no se asocia",
+      primero(lector.asociar(MAQ, [{"quien": "x", "proyecto": "Otro",
+                                    "que": "t10-mirar-la-nube",
+                                    "estado": "trabajando",
+                                    "hace_seg": 1}])).get("github"), None)
+igual("mismo proyecto pero otra rama: tampoco",
+      primero(lector.asociar(MAQ, [{"quien": "x", "proyecto": "Capataz",
+                                    "que": "otra", "estado": "trabajando",
+                                    "hace_seg": 1}])).get("github"), None)
+DOBLE = lector.asociar(MAQ, [
+    {"quien": "uno", "proyecto": "Capataz", "que": "t10-mirar-la-nube",
+     "estado": "trabajando", "hace_seg": 1},
+    {"quien": "dos", "proyecto": "Capataz", "que": "t10-mirar-la-nube",
+     "estado": "trabajando", "hace_seg": 2}])
+igual("con dos candidatos no elige ninguno: elegir sería inventarlo",
+      primero(DOBLE).get("github"), None)
+af("y lo dice",
+   "no se puede saber cuál" in (primero(DOBLE).get("motivo_sin_github") or ""),
+   primero(DOBLE).get("motivo_sin_github"))
+igual("y los dos siguen apareciendo, no se pierden", len(DOBLE), 3)
+
+SIN_RAMA = lector.asociar([{"sesion": "s2", "nombre": "x", "proyecto": "Capataz",
+                            "rama": "", "agentes": []}], GIT)
+igual("una carpeta sin rama no se asocia", primero(SIN_RAMA).get("github"), None)
+af("y el motivo dice por qué",
+   "sin rama" in (primero(SIN_RAMA).get("motivo_sin_github") or ""),
+   primero(SIN_RAMA).get("motivo_sin_github"))
+
+igual("sin nada que asociar no se inventa nada", lector.asociar([], []), [])
+igual("y sin agentes de máquina, los publicados salen igual",
+      len(lector.asociar([], GIT)), 2)
+
 print("\nASERCIONES: %d\nROJAS: %d" % (ASER, ROJAS))
 sys.exit(1 if ROJAS else 0)

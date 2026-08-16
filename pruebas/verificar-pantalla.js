@@ -87,10 +87,6 @@ function armarPantalla() {
     agentes: nodo(), frescura: nodo(), pulso: nodo(),
     // Y los dos del taller, por lo mismo.
     taller: nodo(), alcance: nodo(),
-    // Y los dos de la consola. Faltando, `pintarConsola()` escribe sobre
-    // `undefined` y este arnés se cae con 0 aserciones — que es exactamente
-    // como se descubrió que faltaban.
-    consola: nodo(), "alcance-consola": nodo(),
     // El shell: los dos lugares donde se dibuja el menú.
     "nav-principal": nodo(), tabbar: nodo(),
     // Y el de apariencia. El menú arranca cerrado, como en el marcado.
@@ -99,7 +95,7 @@ function armarPantalla() {
   // Las cuatro vistas, con el `hidden` inicial que tiene el marcado: la primera
   // abierta y las otras tres cerradas. Si acá arrancaran todas visibles, la
   // aserción de «sólo una a la vez» no verificaría el estado inicial.
-  const vistas = ["consola", "taller", "agentes", "proyectos"].map((v, i) =>
+  const vistas = ["taller", "agentes", "proyectos"].map((v, i) =>
     nodo(i === 0 ? { "data-vista": v } : { "data-vista": v, hidden: "" }));
   const relojes = [];
   // `documentElement` es donde vive `data-tema`, y el almacenamiento es de
@@ -435,10 +431,30 @@ af("sin nadie trabajando se dice, y se dice sobre qué se miró",
    htmlVacio.indexOf("sin integrar") >= 0, htmlVacio.slice(0, 200));
 af("y eso NO es «no sé»", htmlVacio.indexOf("quién trabaja · no sé") < 0);
 
+
+/* Lo que el servidor arma con `lector.asociar()`: una sola lista donde cada
+   agente es un renglón. Los ayudantes de abajo la producen igual que él, porque
+   es lo que la pantalla dibuja — sin esto, las secciones probarían una forma de
+   datos que ya no existe. */
+function soloGitHub(agentes) {
+  return (agentes || []).map((g) => ({
+    sesion: "", nombre: g.quien, cwd: "", proyecto: g.proyecto, rama: g.que,
+    viva: null, quieto_hace: null, que: "", sobre: "", motivo_que: "",
+    agentes: [], motivo_sin_agentes: "sólo publicado", id: "",
+    estado_consola: "", motivo_consola: "", github: g, fuente: "github"
+  }));
+}
+function soloMaquina(sesiones) {
+  return (sesiones || []).map((s) => Object.assign({}, s,
+    { fuente: s.fuente || "archivo", github: s.github || null }));
+}
+
 console.log("§ 7 · El visor por agente, y el demonio de un segundo");
 /* La vista primaria: quién trabaja ahora, de todos los proyectos juntos. Y el
  * demonio que la mantiene viva sin mentir sobre la frescura de lo que muestra. */
 const conAg = copia(datos);
+conAg.taller = Object.assign({}, conAg.taller, { ok: true, error: "",
+  sesiones: [], agentes_maquina: [] });
 conAg.agentes = [
   { quien: "coder-1", rol: "coder", proyecto: "Uno", que: "t1-una",
     punto: "T1", asunto: "empujó algo", estado: "trabajando", desde: 1,
@@ -447,6 +463,7 @@ conAg.agentes = [
     punto: "T2", asunto: "hace rato", estado: "caído", desde: 1,
     hace_seg: 90000, sha: "bbb2222" }
 ];
+conAg.agentes_todos = soloGitHub(conAg.agentes);
 const p7 = pintarCon(conAg);
 const hAg = p7.agentes.innerHTML;
 af("la vista primaria dibuja a cada agente con su nombre",
@@ -493,6 +510,7 @@ af("sin umbrales en el JSON no se inventa ninguno",
 function relectura(ctxt, agentes) {
   const d = copia(conAg);
   d.agentes = agentes;
+  d.agentes_todos = soloGitHub(agentes);
   ctxt.FIRMA = "";
   ctxt.pintar(d);
   return ctxt.document.getElementById("agentes").innerHTML;
@@ -554,7 +572,12 @@ function conTaller(sesiones, ok, error) {
                raiz: "/x/.claude", alcance: "esta máquina · ahora",
                leido_en: d.ahora, sesiones: sesiones,
                cuenta: { sesiones: sesiones.length, vivas: 1, agentes: 0,
-                         trabajando: 0 }, sueltas: 0 };
+                         trabajando: 0 }, sueltas: 0,
+               // Lo que la pantalla dibuja de verdad: la lista **ya unida**,
+               // que en el servidor arma `consola.unir()`.
+               agentes_maquina: sesiones };
+  d.agentes = [];
+  d.agentes_todos = soloMaquina(sesiones);
   return d;
 }
 
@@ -607,8 +630,8 @@ const p8c = pintarCon(conTaller([], false, "no encontré /x/.claude · CAPATAZ_T
 af("si el taller no se pudo leer, se dice y se nombra lo que buscó",
    p8c.taller.innerHTML.indexOf("/x/.claude") >= 0, p8c.taller.innerHTML.slice(0, 120));
 const p8d = pintarCon(conTaller([]));
-af("y cero sesiones es otra cosa: se dice que no hay ninguna abierta",
-   p8d.taller.innerHTML.indexOf("ninguna sesión") >= 0,
+af("y cero agentes es otra cosa: se dice que no hay ninguno",
+   p8d.taller.innerHTML.indexOf("ningún agente de Claude Code") >= 0,
    p8d.taller.innerHTML.slice(0, 120));
 af("y avisa que los de otra máquina no se ven acá",
    p8d.taller.innerHTML.indexOf("otra máquina") >= 0);
@@ -665,6 +688,16 @@ console.log("\n§ 9 · La consola");
 
 function conConsola(background, extra) {
   const d = copia(datos);
+  // Igual que el servidor: los background van a la lista unida del taller —que
+  // es la que se dibuja— con el estado del CLI en `estado_consola`.
+  d.taller = Object.assign({}, d.taller, { ok: true, error: "",
+    alcance: "esta máquina · ahora", sesiones: [],
+    agentes_maquina: background.map((b) => Object.assign({}, b, {
+      estado_consola: b.estado, motivo_consola: b.motivo_estado,
+      viva: null, agentes: [], fuente: "cli", proyecto: "",
+      motivo_sin_agentes: "de este agente ya no queda archivo" })) });
+  d.agentes = [];
+  d.agentes_todos = d.taller.agentes_maquina.slice();
   d.consola = Object.assign({
     ok: true, error: "", alcance: "esta máquina · ahora. Son los agentes background",
     comando: "claude agents --json --all", preguntado_en: d.ahora,
@@ -685,11 +718,11 @@ const p9 = pintarCon(conConsola([
   bg("b1", "esperando", "trabado: necesita a una persona"),
   bg("b2", "trabajando"), bg("b3", "falló"), bg("b4", "terminado"),
   bg("b5", "no sé", "el CLI dice `state: 'hibernating'`")]));
-const htmlC = p9.consola.innerHTML;
+const htmlC = p9.taller.innerHTML;
 
 af("el alcance de la consola está escrito y dice que es esta máquina",
-   p9["alcance-consola"].textContent.indexOf("esta máquina") >= 0,
-   p9["alcance-consola"].textContent);
+   p9.alcance.textContent.indexOf("esta máquina") >= 0,
+   p9.alcance.textContent);
 af("«esperando» se pinta ámbar: no está roto, está trabado esperando a alguien",
    /c-esperando/.test(htmlC));
 af("y dice cómo se destraba", htmlC.indexOf("necesita a una persona") >= 0);
@@ -711,33 +744,34 @@ af("el que espera a una persona va primero, antes que el que trabaja",
 const viejo = bg("b9", "trabajando");
 viejo.hace = 999999;
 af("un background que arrancó hace un siglo sigue diciendo lo que dice el CLI",
-   /c-trabajando/.test(pintarCon(conConsola([viejo])).consola.innerHTML));
+   /c-trabajando/.test(pintarCon(conConsola([viejo])).taller.innerHTML));
 
 /* No pude preguntar ≠ no hay ninguno. */
 const p9b = pintarCon(conConsola([], {
   ok: false, error: "no pude correr «claude agents --json --all»: no such file" }));
 af("si la consola no se pudo leer, se dice y se nombra el comando que corrió",
-   p9b.consola.innerHTML.indexOf("claude agents --json --all") >= 0,
-   p9b.consola.innerHTML.slice(0, 140));
-af("y se aclara que el resto del tablero no depende de esto",
-   p9b.consola.innerHTML.indexOf("no depende") >= 0);
+   p9b.taller.innerHTML.indexOf("claude agents --json --all") >= 0,
+   p9b.taller.innerHTML.slice(0, 140));
+af("y se aclara que lo que sale de los archivos se lee igual",
+   p9b.taller.innerHTML.indexOf("se lee igual") >= 0,
+   p9b.taller.innerHTML.slice(0, 200));
 const p9c = pintarCon(conConsola([]));
-af("y cero background es otra cosa: se dice que no hay ninguno",
-   p9c.consola.innerHTML.indexOf("ningún agente background") >= 0,
-   p9c.consola.innerHTML.slice(0, 140));
+af("y cero agentes es otra cosa: se dice que no hay ninguno",
+   p9c.taller.innerHTML.indexOf("ningún agente de Claude Code") >= 0,
+   p9c.taller.innerHTML.slice(0, 140));
 
 /* Los dos lados del aviso que no puede salir siempre. */
 af("sin desacuerdos, la pantalla no dibuja ninguno",
-   p9c.consola.innerHTML.indexOf("no dicen lo mismo") < 0);
+   p9c.taller.innerHTML.indexOf("no dicen lo mismo") < 0);
 const p9d = pintarCon(conConsola([], { desacuerdos: [{
   sesion: "s-7", que: "la carpeta no coincide",
   consola: "/uno", taller: "/otro" }] }));
 af("con uno, se muestra y se ven **las dos** versiones",
-   p9d.consola.innerHTML.indexOf("/uno") >= 0 &&
-   p9d.consola.innerHTML.indexOf("/otro") >= 0);
+   p9d.taller.innerHTML.indexOf("/uno") >= 0 &&
+   p9d.taller.innerHTML.indexOf("/otro") >= 0);
 af("y se dice que capataz no eligió ganador",
-   p9d.consola.innerHTML.indexOf("no elige un ganador") >= 0 ||
-   p9d.consola.innerHTML.indexOf("no elige") >= 0);
+   p9d.taller.innerHTML.indexOf("no elige un ganador") >= 0 ||
+   p9d.taller.innerHTML.indexOf("no elige") >= 0);
 
 /* -------------------------------------------------------------------------
    § 10 · El menú — y que una pestaña no esconda nada
@@ -762,16 +796,17 @@ function igualdad(descripcion, obtenido, esperado) {
 const p10 = pintarCon(datos);
 const ctx10 = p10.contexto;
 
-af("arranca en la consola, que es lo que se pidió", ctx10.VISTA === "consola");
+af("arranca en los agentes, que es la pantalla que se pidió",
+   ctx10.VISTA === "agentes");
 igualdad("y esa es la única vista abierta",
   p10.vistas.filter((v) => !v.hasAttribute("hidden")).map(
-    (v) => v.getAttribute("data-vista")), ["consola"]);
+    (v) => v.getAttribute("data-vista")), ["agentes"]);
 af("el menú se dibuja en los dos lugares: lateral y tabbar",
-   p10["nav-principal"].innerHTML.indexOf("Consola") >= 0 &&
+   p10["nav-principal"].innerHTML.indexOf("Agentes") >= 0 &&
    p10.tabbar.innerHTML.indexOf("Proyectos") >= 0);
-af("y las cuatro vistas están en el menú",
-   ["Consola", "Taller", "Agentes", "Proyectos"].every(
-     (r) => p10.tabbar.innerHTML.indexOf(r) >= 0));
+igualdad("y quedaron **dos** vistas, no más",
+  ["Agentes", "Proyectos", "Taller", "Consola", "GitHub"].filter(
+    (r) => p10.tabbar.innerHTML.indexOf(r) >= 0), ["Agentes", "Proyectos"]);
 af("la pestaña abierta se marca como tal, para que se sepa dónde uno está",
    /aria-current="page"/.test(p10.tabbar.innerHTML));
 
@@ -780,19 +815,19 @@ igualdad("al navegar, la abierta es la nueva y ninguna otra",
   p10.vistas.filter((v) => !v.hasAttribute("hidden")).map(
     (v) => v.getAttribute("data-vista")), ["proyectos"]);
 af("y el contenido de la vista de antes NO se borra: no se vuelve a pedir nada",
-   p10.consola.innerHTML.length > 50,
-   String(p10.consola.innerHTML.length));
-ctx10.irA("consola");
+   p10.taller.innerHTML.length > 50,
+   String(p10.taller.innerHTML.length));
+ctx10.irA("agentes");
 igualdad("y se puede volver", p10.vistas.filter(
   (v) => !v.hasAttribute("hidden")).map((v) => v.getAttribute("data-vista")),
-  ["consola"]);
+  ["agentes"]);
 
 /* La frescura y el pulso viven en la barra, no adentro de una vista: si
    estuvieran en una, las otras tres mostrarían datos sin decir de cuándo son. */
 af("la frescura se escribe en el shell y no en una pestaña",
    p10.frescura.textContent.length > 5, p10.frescura.textContent);
 af("y sigue escrita después de navegar a otra vista",
-   (ctx10.irA("taller"), ctx10.pintarFrescura(),
+   (ctx10.irA("proyectos"), ctx10.pintarFrescura(),
     p10.frescura.textContent.length > 5), p10.frescura.textContent);
 
 /* --- La marca: los dos lados ------------------------------------------ */
@@ -824,17 +859,19 @@ af("pero uno terminado no: es un hecho, no un pendiente",
    pintarCon(conConsola([bg("b1", "terminado")])).tabbar
      .innerHTML.indexOf("marca-vista") < 0);
 
-/* Y los tres estados que NO pueden marcar, porque salen en todas las corridas.
-   Medido el 2026-08-15 contra los datos de verdad: los cuatro agentes del
-   tablero están «caído» y los tres proyectos tienen filas «sin estado». */
+/* Y el estado que NO puede marcar, porque sale en todas las corridas. Medido el
+   2026-08-15 contra los datos de verdad: los cuatro agentes del tablero están
+   «caído» y los tres proyectos tienen filas «sin estado». */
 const conCaidos = conTodoSano();
 conCaidos.agentes = [{ quien: "x", proyecto: "P", que: "r", estado: "caído",
                        punto: "", asunto: "", sha: "a" }];
-af("«caído» NO marca la pestaña de agentes: es el estado más común del tablero",
+conCaidos.agentes_todos = soloGitHub(conCaidos.agentes);
+af("«caído» NO marca la pestaña: es el estado más común del tablero",
    pintarCon(conCaidos).tabbar.innerHTML.indexOf("marca-vista") < 0);
 const conSinRama = conTodoSano();
 conSinRama.agentes = [{ quien: "x", proyecto: "P", que: "r", estado: "sin rama",
                         punto: "T1", asunto: "", sha: "" }];
+conSinRama.agentes_todos = soloGitHub(conSinRama.agentes);
 af("«sin rama» sí marca: es un `en curso` del que no llegó ni un commit",
    pintarCon(conSinRama).tabbar.innerHTML.indexOf("marca-vista") >= 0);
 
