@@ -286,5 +286,119 @@ igual("ninguna animación comparte nombre con otra", repetidos, [])
 af("y hay al menos dos animaciones declaradas, si no esto no mira nada",
    len(nombres) >= 2, nombres)
 
+print("§ 6 · A quién le contesta, que no es lo mismo que el puerto")
+#
+# **Esto se ejercita levantando el servidor de verdad**, dos veces, y midiendo
+# quién contesta desde afuera de loopback. Un arnés que sólo mirara la constante
+# `SOLO_ESTA_MAQUINA` pasaría entero con un `ThreadingHTTPServer` que la ignora
+# —que es exactamente el bug que importa acá—, y ésa es la forma vacua contra la
+# que el proyecto ya se estrelló cuatro veces: leer un archivo y buscar una
+# cadena no prueba que el código corra.
+#
+# Y hay una trampa medida, que es la razón de que se pruebe contra la IP y no
+# contra el nombre: `<LocalHostName>.local` contesta 200 **desde esta misma
+# Mac** aunque nadie más pueda entrar, porque resuelve también a 127.0.0.1. La
+# prueba cómoda es la que miente.
+import socket as _socket        # noqa: E402
+import subprocess               # noqa: E402
+import time as _time            # noqa: E402
+import urllib.error             # noqa: E402
+import urllib.request           # noqa: E402
+
+igual("el default es sólo esta máquina", capataz.SOLO_ESTA_MAQUINA, "127.0.0.1")
+af("y sin la variable, eso es lo que se usa",
+   capataz.ESCUCHA == capataz.SOLO_ESTA_MAQUINA, capataz.ESCUCHA)
+
+IP = capataz.ip_en_la_red()
+af("esta máquina tiene una IP en la red que no es loopback (si no, esta "
+   "sección no puede distinguir nada)",
+   bool(IP) and not IP.startswith("127."), IP or "(ninguna)")
+print("       la IP de esta máquina en la red es %s" % (IP or "(ninguna)"))
+
+
+def _puerto_libre():
+    s = _socket.socket()
+    s.bind(("127.0.0.1", 0))
+    p = s.getsockname()[1]
+    s.close()
+    return p
+
+
+def _contesta(host, puerto, espera=1.5):
+    try:
+        with urllib.request.urlopen("http://%s:%d/" % (host, puerto),
+                                    timeout=espera) as r:
+            return r.status == 200
+    except (urllib.error.URLError, OSError):
+        return False
+
+
+def _levantar(escucha):
+    """Capataz de verdad, en un puerto libre. Devuelve `(proceso, puerto)`."""
+    puerto = _puerto_libre()
+    entorno = dict(os.environ, CAPATAZ_PUERTO=str(puerto))
+    if escucha is not None:
+        entorno["CAPATAZ_ESCUCHA"] = escucha
+    else:
+        entorno.pop("CAPATAZ_ESCUCHA", None)
+    proc = subprocess.Popen([sys.executable, "capataz.py"], cwd=RAIZ,
+                            env=entorno, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT)
+    # Esperar a que conteste, en vez de dormir un número inventado: un sleep
+    # corto convierte esta sección en una que falla los días que la máquina está
+    # ocupada, y una roja que va y viene sola es la que hace que se deje de
+    # mirar el color.
+    for _ in range(60):
+        if _contesta("127.0.0.1", puerto, 0.3):
+            return proc, puerto
+        if proc.poll() is not None:
+            return proc, puerto
+        _time.sleep(0.1)
+    return proc, puerto
+
+
+PROC, PUERTO_A = _levantar(None)
+try:
+    af("con el default, contesta en esta máquina",
+       _contesta("127.0.0.1", PUERTO_A))
+    af("y **no** contesta en la IP de la red: el tablero no se expone solo",
+       IP and not _contesta(IP, PUERTO_A), "%s:%d contestó" % (IP, PUERTO_A))
+finally:
+    PROC.terminate()
+    PROC.wait(timeout=10)
+
+PROC, PUERTO_B = _levantar("0.0.0.0")
+try:
+    af("con CAPATAZ_ESCUCHA=0.0.0.0 sigue contestando en esta máquina",
+       _contesta("127.0.0.1", PUERTO_B))
+    # La anti-vacua de la de arriba: sin ésta, «no se expone solo» pasaría igual
+    # con un capataz que no se puede abrir de ninguna forma.
+    af("y **sí** contesta en la IP de la red, que es lo que hace que el "
+       "teléfono lo pueda leer",
+       IP and _contesta(IP, PUERTO_B), "%s:%d no contestó" % (IP, PUERTO_B))
+finally:
+    PROC.terminate()
+    PROC.wait(timeout=10)
+
+# Lo que se imprime al arrancar. Es la única parte de esto que alguien lee.
+CERRADO = capataz.donde_mirarlo(capataz.SOLO_ESTA_MAQUINA, capataz.PUERTO)
+ABIERTO = capataz.donde_mirarlo("0.0.0.0", capataz.PUERTO)
+af("cerrado, dice cómo abrirlo", any("--telefono" in l for l in CERRADO), CERRADO)
+af("abierto, avisa que cualquiera en la wifi puede leerlo y que no pide "
+   "credencial", any("credencial" in l for l in ABIERTO), ABIERTO)
+af("y da la IP, no sólo el nombre: probar el nombre desde esta Mac contesta "
+   "igual aunque nadie más entre", any(IP in l for l in ABIERTO) if IP else False,
+   ABIERTO)
+
+# La bandera y la variable, declaradas donde alguien las va a buscar.
+RUN = io.open(os.path.join(RAIZ, "run.sh"), encoding="utf-8").read()
+af("run.sh traduce --telefono a la variable, y no la escribe en el código",
+   "--telefono" in RUN and "CAPATAZ_ESCUCHA=0.0.0.0" in RUN)
+MAPA = io.open(os.path.join(RAIZ, "ops", "00-mapa.md"), encoding="utf-8").read()
+af("ops/00-mapa.md documenta la variable que abre el tablero",
+   "CAPATAZ_ESCUCHA" in MAPA)
+af("y deja escrito que el nombre .local contesta desde la propia Mac aunque "
+   "el teléfono no entre", "resuelve también a loopback" in MAPA)
+
 print("\nASERCIONES: %d\nROJAS: %d" % (ASER, ROJAS))
 sys.exit(1 if ROJAS else 0)

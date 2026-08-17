@@ -36,6 +36,35 @@ El 5402 está declarado en **un solo lugar del código** —`PUERTO_POR_DEFECTO`
 un puerto que vive en dos lugares que se separan es exactamente cómo se elige
 uno ocupado.
 
+## A quién le contesta capataz, que no es lo mismo que el puerto
+
+Por defecto, **sólo esta máquina**: `capataz.py` escucha en `127.0.0.1`
+(`SOLO_ESTA_MAQUINA`). No es prudencia genérica —el tablero muestra los
+seguimientos de tres proyectos, la rama y la carpeta de cada agente, y no pide
+ninguna credencial— y por eso abrirlo es un acto de cada arranque:
+
+```
+./run.sh              sólo esta Mac
+./run.sh --telefono   CAPATAZ_ESCUCHA=0.0.0.0 — cualquiera en la wifi de casa
+```
+
+**El nombre para el teléfono ya existe y no hay que crear ninguno.** Medido el
+2026-08-17 en esta Mac:
+
+| Nombre | Resuelve a | Quién lo publica |
+|---|---|---|
+| `MacBook-Air.local` | 192.168.100.58 **y** 127.0.0.1 | Bonjour, de fábrica |
+| `cualquier-cosa.localhost` | 127.0.0.1 | el resolver de macOS, de fábrica |
+
+O sea que `/etc/hosts` no hace falta tocarlo, y sigue con las tres líneas que
+trae de fábrica.
+
+**Y la trampa, que costó una medición**: `MacBook-Air.local:5402` contesta 200
+**desde la propia Mac** aunque el teléfono no pueda entrar, porque el nombre
+resuelve también a loopback y el cliente cae ahí. La prueba que vale es contra
+la IP de la wifi. Eso está verificado ejecutando dos servidores de verdad en
+`pruebas/verificar-angosto.py` § 6.
+
 ## La misma carpeta, dos rutas
 
 `frutos de cuyo` está montada en dos lugares a la vez:

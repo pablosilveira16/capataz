@@ -1615,3 +1615,87 @@ sobre datos de un módulo que ya no existía.
 
 **833 aserciones en verde**, cero rojas. Antes de la tanda eran 788. Y de las
 45 nuevas, una es la fila del T48 en este seguimiento: el T8 otra vez.
+
+---
+
+# Tanda 11 · Desde el teléfono, sin crear ningún DNS — 2026-08-17
+
+> *«¿podemos crear DNS para localhost en la máquina?»* → *«llegar desde el
+> teléfono está bueno»*
+
+La respuesta a la primera pregunta es que **no hay nada que crear**, y se supo
+midiendo antes de escribir una línea:
+
+| Nombre | Resuelve a | Quién lo publica |
+|---|---|---|
+| `MacBook-Air.local` | 192.168.100.58 **y** 127.0.0.1 | Bonjour, de fábrica |
+| `lo-que-sea.localhost` | 127.0.0.1 | el resolver de macOS, de fábrica |
+
+`/etc/hosts` sigue con las tres líneas que trae de fábrica y no hizo falta
+tocarlo — o sea que tampoco hizo falta la contraseña de Pablo. Lo que el DNS no
+puede dar es sacar el `:5402`: un nombre resuelve a una IP, no a un puerto, y
+para escribir `capataz.localhost` a secas haría falta algo escuchando en el 80,
+que en macOS pide root. Eso ya no es DNS, es un proxy.
+
+## Lo que faltaba no era el nombre: era que capataz contestara ahí
+
+Escuchaba en `127.0.0.1`, así que el nombre existía y no llevaba a ningún lado.
+Ahora el bind es una decisión aparte del puerto, y **el default no cambió**:
+
+```
+./run.sh              sólo esta Mac
+./run.sh --telefono   CAPATAZ_ESCUCHA=0.0.0.0 — cualquiera en la wifi de casa
+```
+
+Que viva en una variable de entorno y no en una constante es el punto: capataz
+muestra los seguimientos de tres proyectos, la rama y la carpeta de cada agente,
+y no pide ninguna credencial. Abrirlo tiene que ser un acto de cada arranque, no
+un estado que quedó de la vez que alguien lo probó. Olvidarse de la bandera no
+expone nada, que es el error que conviene que sea el barato.
+
+## La prueba cómoda era la que mentía
+
+`MacBook-Air.local:5402` contestaba **200 desde la propia Mac** con capataz
+todavía cerrado, y por eso parecía que ya funcionaba. No funcionaba: el nombre
+resuelve a la IP de la red **y** a la de loopback, y el cliente cae en la
+segunda. Un verde que no distingue el caso que importa es el tablero que miente
+de la regla 3, pero del lado de quien verifica.
+
+La prueba que vale es contra la IP de la wifi, y por eso `capataz.py` la imprime
+al arrancar junto al nombre, con la advertencia al lado. `ip_en_la_red()` se la
+pregunta al sistema sin mandar ningún paquete —un `connect` UDP a 192.0.2.1, la
+red reservada para ejemplos— en vez de correr `ipconfig getifaddr en0`, que
+depende de que la interfaz se llame así.
+
+## El arnés levanta dos servidores de verdad
+
+Mirar la constante `SOLO_ESTA_MAQUINA` no prueba nada: un
+`ThreadingHTTPServer` que la ignora pasaría entero, y ése es justo el bug que
+importa. Así que § 6 levanta capataz **dos veces** en un puerto libre y mide
+quién contesta desde afuera de loopback:
+
+| Bug puesto | Rojas |
+|---|---|
+| el bind ignora la variable y abre siempre | 1 |
+| el default pasa a ser abierto | 4 |
+| la variable no abre nada, queda siempre cerrado | 1 |
+
+La tercera es la anti-vacua de la primera: sin ella, «no se expone solo» pasaría
+igual con un capataz que no se puede abrir de ninguna forma.
+
+## Lo que se midió y lo que no
+
+Medido: el socket queda en `*:5402`, la IP de la wifi contesta 200, y el
+firewall de macOS está **apagado** (`socketfilterfw --getglobalstate`). De ahí
+se sigue que un aparato de la red entra — pero eso es una inferencia, no una
+medición: **desde la propia Mac no se puede probar el teléfono**. Queda del lado
+de Pablo, igual que el D1.
+
+Y una lección de operación que costó media pantalla: el servidor que estaba
+corriendo era **del sábado**. `pkill -f "python3 capataz.py"` no lo mataba
+porque el proceso se llama `Python capataz.py`, y como el HTML se lee de disco
+en cada pedido, la pantalla nueva se servía sobre una API vieja.
+
+## El total
+
+**847 aserciones en verde**, cero rojas. Antes de la tanda eran 833.

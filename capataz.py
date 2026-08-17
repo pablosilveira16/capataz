@@ -28,6 +28,7 @@ El puerto es el **5402**. Los vecinos ocupados están en `ops/00-mapa.md`: 5300,
 import io
 import json
 import os
+import socket
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -46,6 +47,25 @@ PAGINA = os.path.join(AQUI, "capataz.html")
 # verifica que los dos digan lo mismo.
 PUERTO_POR_DEFECTO = 5402
 PUERTO = int(os.environ.get("CAPATAZ_PUERTO", PUERTO_POR_DEFECTO))
+
+# A quién le contesta, que es una decisión aparte del puerto.
+#
+# **Por defecto, sólo esta máquina.** No es prudencia genérica: capataz muestra
+# los seguimientos de tres proyectos, en qué rama trabaja cada agente y en qué
+# carpeta, y no pide ninguna credencial para mirarlo. Abrirlo a la red de casa
+# es una decisión que alguien tiene que tomar **cada vez**, y por eso vive en
+# una variable de entorno y no en una constante que un día se cambia y queda:
+# un tablero que se expone solo porque alguien reinició el servidor es
+# exactamente el cambio que nadie decidió.
+#
+#     ./run.sh              → 127.0.0.1, sólo esta Mac
+#     ./run.sh --telefono   → 0.0.0.0, cualquiera en la red de casa
+#
+# El requisito que motiva el proyecto es leerlo desde el teléfono (D1, X2), y
+# el nombre para hacerlo **ya existe**: macOS publica `<LocalHostName>.local`
+# por Bonjour. Lo único que faltaba era que capataz contestara ahí.
+SOLO_ESTA_MAQUINA = "127.0.0.1"
+ESCUCHA = os.environ.get("CAPATAZ_ESCUCHA", SOLO_ESTA_MAQUINA)
 
 # Tres relojes distintos, y confundirlos es cómo se hace un tablero que miente:
 #
@@ -194,6 +214,51 @@ class Capataz(BaseHTTPRequestHandler):
         """Sin log de acceso: son cuatro pedidos por minuto de un poll."""
 
 
+def ip_en_la_red():
+    """La IP de esta máquina en la red de casa, o `""` si no hay ninguna.
+
+    Se le pregunta al sistema **por qué ruta saldría** un paquete, sin mandar
+    ninguno: un `connect` sobre UDP no habla con nadie —192.0.2.0/24 es la red
+    reservada para ejemplos, justamente para que no exista— y deja en el socket
+    la dirección de origen que se habría usado. Es lo mismo que contesta
+    `ipconfig getifaddr en0` sin depender de que la interfaz se llame `en0`, y
+    sin correr un proceso ajeno.
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("192.0.2.1", 1))
+        return s.getsockname()[0]
+    except OSError:
+        return ""
+    finally:
+        s.close()
+
+
+def donde_mirarlo(escucha, puerto):
+    """Las líneas que se imprimen al arrancar: desde dónde se lo puede mirar.
+
+    **Y la trampa medida, escrita donde se la va a leer.** Probar
+    `MacBook-Air.local` desde esta misma Mac devuelve 200 aunque el teléfono no
+    pueda entrar: el nombre resuelve a la IP de la red **y** a la de loopback, y
+    el cliente cae en la segunda. O sea que la prueba más cómoda es la que
+    miente. La que vale es contra la IP de la red, y por eso se imprime.
+    """
+    if escucha == SOLO_ESTA_MAQUINA:
+        return ["  Sólo esta máquina. Para verlo desde el teléfono: "
+                "./run.sh --telefono"]
+    ip = ip_en_la_red()
+    nombre = socket.gethostname()
+    lineas = ["  Abierto a la red: cualquiera que esté en esta wifi puede "
+              "leerlo, y capataz no pide ninguna credencial."]
+    if nombre:
+        lineas.append("  Desde el teléfono  ->  http://%s:%d" % (nombre, puerto))
+    if ip:
+        lineas.append("  Si el nombre no anda ->  http://%s:%d" % (ip, puerto))
+        lineas.append("  (probar el nombre DESDE ESTA MAC no sirve: resuelve "
+                      "también a 127.0.0.1 y contesta igual)")
+    return lineas
+
+
 def render_estatico(destino):
     """La misma pantalla con los datos incrustados, en un archivo suelto.
 
@@ -224,11 +289,14 @@ if __name__ == "__main__":
             AQUI, "_instantanea.html")
         print("instantánea:", render_estatico(destino))
         raise SystemExit(0)
-    print("\n  Capataz  ->  http://127.0.0.1:%d\n" % PUERTO)
+    print("\n  Capataz  ->  http://127.0.0.1:%d" % PUERTO)
+    for linea in donde_mirarlo(ESCUCHA, PUERTO):
+        print(linea)
+    print("")
     print("  Proyectos vigilados: %s" % PROYECTOS)
     for p in lector.leer_proyectos(PROYECTOS):
         print("    · %-12s %s" % (p["nombre"], p["repo"] or "(sin repo)"))
     print("  Espejos de sólo lectura en: %s" % nube.ESPEJOS)
     print("  Consola: %s (se apaga con CAPATAZ_CONSOLA=0)" % " ".join(consola.ARGV))
     print("\n  Capataz sólo lee. No marca puntos, no lanza agentes.\n")
-    ThreadingHTTPServer(("127.0.0.1", PUERTO), Capataz).serve_forever()
+    ThreadingHTTPServer((ESCUCHA, PUERTO), Capataz).serve_forever()
