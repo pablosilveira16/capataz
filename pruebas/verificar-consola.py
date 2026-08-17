@@ -537,6 +537,18 @@ FANTASMAS = consola.unir(
                    "quieto_hace": 5}]))
 igual("el que ya no tiene archivo va al final, aunque diga «esperando»",
       [f["nombre"] for f in FANTASMAS], ["el-vivo", "el-fantasma"])
+# **Y lo dice en el renglón**, que es lo que se agregó el 2026-08-17. Antes ser
+# fantasma se calculaba adentro de la función de orden y no salía a ningún lado;
+# desde que la pantalla tiene una zona para «esto pide una persona», ella
+# también necesita saberlo — y dos lugares calculando lo mismo es la regla 1.
+igual("y el renglón dice que es un fantasma, para que no lo use nadie más",
+      [(f["nombre"], f["fantasma"]) for f in FANTASMAS],
+      [("el-vivo", False), ("el-fantasma", True)])
+af("un background terminado NO es un fantasma: que ya no tenga archivo es "
+   "justamente lo que se espera de uno que terminó",
+   UNO.get("fantasma") is False, UNO.get("fantasma"))
+af("y uno con archivo tampoco, por trabado que esté: ése sí espera a alguien",
+   DOS[0]["fantasma"] is False, DOS[0]["fantasma"])
 
 af("si el taller no se pudo leer, unir no inventa: devuelve lo que había",
    consola.unir(vista_consola(background=[{"sesion": SES_A, "estado": "x"}]),

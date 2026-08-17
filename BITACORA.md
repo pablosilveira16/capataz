@@ -1461,3 +1461,157 @@ vive en el seguimiento, que es donde se lo busca.
 **788 aserciones en verde**, cero rojas. Antes de la tanda eran 778 — y la de
 diferencia con las 787 que dio antes de escribir esto es la fila nueva de este
 seguimiento, que es el T8 una vez más.
+
+---
+
+# Tanda 10 · La pantalla de escritorio — 2026-08-17
+
+> *«hay que refactorear toda la visualización; para comenzar no se aprovecha
+> nada del espacio en desktop, que va a ser el foco principal de este dashboard.
+> Me gustó que está el color verde los 4 agentes que realmente se están moviendo
+> ahora: preciso que eso sea lo principal, que se note la diferencia y tenga
+> mayor información —por ejemplo cuando se traba con una pregunta, que la
+> pantalla se vea bien rápido eso—. Los agentes que están vivos tienen que
+> quedar fijo y que se vaya actualizando el contenido de adentro, no que vayan
+> cambiando el orden a medida que mete una acción cada uno. Y el seguimiento de
+> proyectos tiene el mismo problema de espacio y formato tipo diario que no
+> sirve para nada: tiene que ser bastante visual, con un fuerte foco en los
+> puntos que hay pendientes y priorizando siempre por importancia.»*
+
+Cuatro pedidos, y el primero cambia una premisa que venía del día cero: **el
+foco pasa a ser el escritorio**. El teléfono no se abandona —D1 sigue siendo el
+requisito que motivó el proyecto— pero deja de ser la medida de todo: en un
+monitor de 2000 px la hoja eran 640 px en el medio y el resto fondo.
+
+Lo que hace que el cambio no rompa el teléfono no es cuidado: es que
+`verificar-angosto.py` § 1 mide que **ninguna declaración de ancho pase de
+360 px fuera de una media query ancha**, así que todo lo del escritorio tuvo que
+escribirse adentro de una. Por eso las columnas se cuentan por saltos
+—`repeat(3, minmax(0, 1fr))`— y no con el `minmax(420px, 1fr)` que sería lo
+natural: un mínimo en píxeles es una declaración de ancho, y el arnés la ve.
+
+## Las tres zonas, y por qué son zonas y no un orden
+
+El pedido de que un agente trabado «se vea bien rápido» tenía una salida barata
+—ponerlo primero en la lista— y es la que no sirve: **para notar que algo subió
+un lugar en una lista hay que estar leyendo la lista**, y un tablero se mira de
+reojo. Así que son tres zonas y cada agente cae en una sola:
+
+| | |
+|---|---|
+| **pide una persona** | ancho completo, arriba de todo, y **casi siempre vacía** |
+| **trabajando ahora** | grilla de tarjetas grandes, hasta cuatro por fila |
+| **el resto** | los tres renglones de la Tanda 9, en dos columnas |
+
+Que nadie se dibuje dos veces es lo que se aprendió en T41 y no se vuelve a
+pagar. Y los dos relojes no se mezclan: una sesión de esta máquina se mide en
+minutos (`umbrales_taller`, 5 min) y una rama publicada en horas (45 min).
+
+## El fantasma que se iba a quedar a vivir en el lugar más caro
+
+Con la zona nueva recién hecha se miró la pantalla, y los dos primeros carteles
+de «trabado: espera a una persona» eran **dos agentes muertos hacía horas**. Es
+el T37: el registro del CLI no se limpia nunca, así que un background que murió
+sin avisar se queda `blocked` para siempre.
+
+O sea que la zona inventada para que un pedido se vea rápido iba a estar ocupada
+en todas las corridas — el corolario de la regla 3, y justo en el aviso que
+menos conviene que se ignore. La salida no fue resolver el T37 (falta decidir la
+palabra), sino negarse a tratar a un fantasma como alguien que espera: **si el
+CLI lo da por vivo y de él no queda ningún archivo, no está esperando a nadie**.
+
+Ser fantasma ya se calculaba, adentro de la función de orden de `consola.unir` y
+sin salir a ningún lado. Ahora es `consola.es_fantasma()` y viaja en el renglón:
+la pantalla lo lee, no lo recalcula. Dos lugares decidiendo lo mismo es la regla
+1, aunque el segundo lugar sea una línea de JavaScript.
+
+## Dos mecanismos para el orden fijo, y uno no hacía nada
+
+«Que queden fijos y se actualice el contenido de adentro» se implementó con dos
+cosas: una tabla de ranuras que le fijaba a cada agente el lugar de su primera
+aparición, **y** una reconciliación por nodo. Al ponerle el bug de vuelta a la
+tabla de ranuras —sacarle el `sort`— **el arnés siguió verde**.
+
+La roja que no apareció era la respuesta: un nodo que sólo se agrega al final
+nunca se mueve, así que el orden del DOM ya es el de la primera aparición. La
+tabla de ranuras no se ejecutaba para nada. Se borró.
+
+Es el T35 otra vez —dos versiones de lo mismo y ninguna regla sobre cuál gana—
+pero encontrado por el camino que la regla 2 promete: probar el rojo no sólo
+verifica el arnés, también encuentra código que no hace nada.
+
+Lo que quedó es uno solo: cada agente tiene su caja, creada **una vez**, con
+cuatro nodos adentro que se escriben sólo cuando cambian, y el reloj —que cambia
+siempre— como su propio nodo al que se le toca el texto y no el HTML. La § 13
+pinta dos veces con el orden dado vuelta y comprueba que no se movió nadie, que
+la caja **es el mismo objeto**, y que el contador avanza sin reescribir lo que
+el agente está haciendo.
+
+Eso obligó a que el DOM de mentira del arnés tuviera hijos de verdad
+—`createElement`, `appendChild`, `innerHTML` como accesor—. Con el nodo de
+antes, que era un objeto con una cadena, «es el mismo objeto» no se podía
+afirmar.
+
+## «Priorizando por importancia», que es lo que capataz no puede saber
+
+El cuarto pedido tiene adentro una tensión con la regla 3, y esquivarla era
+fácil: ordenar por algo que parezca importancia. **La importancia no está
+escrita en ninguna celda de ningún seguimiento.** Inventar un puntaje a partir
+del título hubiera sido peor que no ordenar, porque un orden inventado se lee
+como un orden decidido.
+
+Lo que sí está medido: quién lo tomó, quién lo espera, y **el orden en que el
+que escribe lo puso** —que es la única prioridad que un seguimiento sí trae—.
+Con eso ordena `lector.falta()`, en un solo lugar, y la pantalla lo dibuja sin
+volver a ordenarlo. Y la regla del orden se muestra **al lado del orden**, con
+la frase de que cuál es más importante capataz no lo afirma.
+
+El tope de doce puntos por tarjeta dice cuántos quedaron afuera. Un corte en
+silencio se lee como «esto es todo lo que falta».
+
+## Dos arneses que se cayeron, y los dos eran del arnés
+
+**Uno.** `verificar-nube.py` se puso rojo comparando los `en curso` que lee
+capataz contra un conteo a mano: T3, T10b y T32 **hablan de** un `en curso
+(fulano)` en su título mientras su estado dice otra cosa, y el conteo a mano
+miraba el renglón entero. Capataz leía bien; el que confundía una frase con un
+estado era el que verifica. Ahora mira la última celda. Es la misma trampa que
+ya se había comido a `verificar-angosto.py` con el comentario que explica que no
+hay tablas.
+
+**Dos.** Una aserción nueva —«la historia no falta»— pasó **en verde con el bug
+puesto**: el caso de prueba tenía toda la historia en `hecho`, y los `hecho` no
+entran a la lista por otro motivo. Hizo falta agregar un punto `pendiente`
+adentro de la historia para que el filtro verificara algo. Es la forma vacua de
+siempre, encontrada por probar el rojo.
+
+## Lo que se vio rojo
+
+| Bug puesto | Rojas |
+|---|---|
+| `falta()` ordena sólo por el orden del archivo, sin agrupar | 2 |
+| `falta()` cuenta también la historia | 3 |
+| la zona de los vivos se redibuja entera con `innerHTML` | 5 |
+| un trabado es un renglón más del montón | 5 |
+| la pantalla reordena lo que falta por su cuenta | 1 |
+| el tope de puntos corta en silencio | 2 |
+| un fantasma vuelve a contar como que espera a una persona | 2 + 2 |
+
+## Lo que se vio mirando, que ningún arnés vio
+
+Tres cosas, y las tres son de las que un arnés no puede ver porque para él el
+texto está entero: los dos fantasmas en la zona cara; **el identificador de cada
+punto escrito en vertical**, una letra por renglón, porque el flex le comía el
+ancho; y los títulos cortados a la cuenta exacta, que terminaban en «…es «en
+curso huérfa» y se leen como un archivo roto.
+
+Y una cuarta, que no es de la pantalla: **el servidor que estaba corriendo era
+del sábado**. `pkill -f "python3 capataz.py"` no lo mataba porque el proceso se
+llama `Python capataz.py`, así que el HTML nuevo se servía —se lee de disco en
+cada pedido— y el Python viejo seguía contestando la API. Media pantalla nueva
+sobre datos de un módulo que ya no existía.
+
+## El total
+
+**833 aserciones en verde**, cero rojas. Antes de la tanda eran 788. Y de las
+45 nuevas, una es la fila del T48 en este seguimiento: el T8 otra vez.

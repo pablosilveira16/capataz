@@ -84,6 +84,9 @@ _SEPARADOR = re.compile(r"^\|[\s:|-]+\|\s*$")
 _FECHA = re.compile(r"\d{4}-\d{2}-\d{2}")
 _QUIEN = re.compile(r"en curso\s*\(\s*([^)]*?)\s*\)", re.I)
 _PABLO = re.compile(r"pendiente\s*\(\s*pablo", re.I)
+# A quién espera un `pendiente (fulano)`, sea quien sea: el nombre lo pone el
+# seguimiento ajeno y capataz lo repite.
+_ESPERA = re.compile(r"pendiente\s*\(\s*([^)]*?)\s*\)", re.I)
 _ID = re.compile(r"^([A-Za-z]{1,4})\s*-?\s*(\d+[a-z]?)$")
 
 
@@ -340,6 +343,71 @@ def pendientes_de_pablo(puntos):
     """Los que lo bloquean a él. Van aparte porque nadie más los puede mover."""
     return [p for p in puntos
             if p["estado"] == "pendiente" and p["bloquea_a_pablo"]]
+
+
+# ---------------------------------------------------------------------------
+# Lo que falta, ordenado — y por qué el orden no dice «importancia»
+# ---------------------------------------------------------------------------
+#
+# El pedido fue «priorizando siempre por importancia de la funcionalidad», y la
+# respuesta honesta es que **capataz no puede saber eso**: ningún seguimiento
+# escribe la importancia de un punto en ninguna celda. Inventar un puntaje a
+# partir del título sería el tablero que miente del que habla la regla 3, y peor
+# que no ordenar: un orden inventado se lee como un orden decidido.
+#
+# Lo que sí está medido en el archivo, y con eso se ordena:
+#
+#   0  `en curso` — alguien lo tomó. Si ese alguien se cayó, es lo primero que
+#      hay que ver, y por eso va arriba aunque no sea lo más importante;
+#   1  `pendiente (Pablo)` — espera a una persona y **nadie más lo puede mover**;
+#   2  `pendiente` — lo que se puede agarrar ahora;
+#   3  `sin estado` — no se sabe si falta o no. Va último y **va**: esconderlo
+#      sería contar como cero algo que es «no sé».
+#
+# Y adentro de cada grupo manda **el orden en que está escrito**, que es la
+# única señal de prioridad que un seguimiento sí tiene: el que escribe pone
+# arriba lo que quiere que se lea primero. La pantalla dice con qué se ordenó;
+# un orden sin su regla al lado es un orden que se lee como una opinión de
+# capataz.
+GRUPOS = (
+    ("en curso", "lo tomó %s"),
+    ("espera a una persona", "pendiente (%s): nadie más lo puede mover"),
+    ("pendiente", "como está escrito en el seguimiento"),
+    ("sin estado", "su fila no dice en qué estado está"),
+)
+
+
+def falta(puntos):
+    """Lo que falta de un proyecto, en el orden de arriba. Nunca la historia.
+
+    Devuelve copias con dos campos nuevos: `grupo` (0…3) y `porque`, que es la
+    frase que la pantalla muestra al lado. Los `hecho`, `diferido` y
+    `descartado` no entran: no faltan.
+    """
+    salida = []
+    for orden, p in enumerate(puntos):
+        if p["historia"]:
+            continue
+        if p["estado"] == "en curso":
+            grupo, quien = 0, p["quien"] or "alguien"
+        elif p["estado"] == "pendiente" and p["bloquea_a_pablo"]:
+            # De quién espera sale de la celda —`pendiente (Pablo)`—, no de una
+            # lista escrita acá: el día que otro proyecto ponga otro nombre, la
+            # pantalla dice ese nombre y no «Pablo».
+            m = _ESPERA.search(p["estado_crudo"] or "")
+            grupo, quien = 1, (m.group(1) if m else "una persona")
+        elif p["estado"] == "pendiente":
+            grupo, quien = 2, ""
+        elif p["estado"] == SIN_ESTADO:
+            grupo, quien = 3, ""
+        else:
+            continue
+        rotulo, plantilla = GRUPOS[grupo]
+        salida.append(dict(p, grupo=grupo, rotulo_grupo=rotulo, orden=orden,
+                           porque=(plantilla % quien) if "%s" in plantilla
+                           else plantilla))
+    salida.sort(key=lambda p: (p["grupo"], p["orden"]))
+    return salida
 
 
 # ----------------------------------------------------------------------------
@@ -759,6 +827,11 @@ def mirar(proy, repo, ahora=None):
         "cuenta_abiertos": contar(puntos, solo_abiertos=True),
         "cuenta_total": contar(puntos),
         "en_curso": en_curso(puntos),
+        # Lo que falta, ya ordenado y en un solo lugar. La pantalla no vuelve a
+        # decidir el orden: dos criterios de prioridad en dos archivos y ninguna
+        # regla sobre cuál gana es la regla 1 rota en el dato que se mira para
+        # decidir qué se hace después.
+        "falta": falta(puntos),
         "pendientes_de_pablo": pendientes_de_pablo(puntos),
         "sin_estado": [p for p in puntos if p["estado"] == SIN_ESTADO],
         "roles": roles,

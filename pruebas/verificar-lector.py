@@ -104,7 +104,13 @@ SEG_CON_ESTADO = u"""# Prueba — Seguimiento
 |---|---|---|
 | A1 | El esqueleto | **hecho** · `verificar-x.py` 12 aserciones |
 | A2 | La portada | **hecho** · `verificar-x.py` 12 aserciones |
+| A3 | Lo que la tanda 0 dejó sin cerrar | pendiente |
 """
+# A3 está **adentro de la historia y en pendiente**, y no está de adorno: es el
+# único caso que hace que el filtro «la historia no falta» de `lector.falta()`
+# verifique algo. Con la historia toda en `hecho`, sacar ese filtro no cambiaba
+# ni una fila y la aserción pasaba en verde con el bug puesto — se vio probando
+# el rojo, que es para lo que se prueba el rojo.
 
 # Formato Finca 360: las tablas de *Abierto ahora* NO tienen columna `Estado`.
 # El estado lo dice el título de la sección. Sin el mapa declarado en
@@ -325,6 +331,53 @@ af("y el más viejo es más viejo", ec[0]["dias"] > ec[1]["dias"])
 
 igual("la tabla del vocabulario de estados no se cuenta como puntos",
       v["seguimiento"]["tablas_ignoradas"], 1)
+
+# -----------------------------------------------------------------------
+print("§ 2b · Lo que falta, ordenado — y el orden no es una opinión")
+# -----------------------------------------------------------------------
+#
+# El pedido fue «priorizando por importancia», y la importancia **no está
+# escrita en ningún seguimiento**. Lo que se ordena es lo medible: quién lo
+# tomó, quién lo espera, y el orden en que el que escribe lo puso. Esta sección
+# verifica exactamente eso, con los ids contados a mano sobre `SEG_CON_ESTADO`:
+#
+#   grupo 0  T3, T4      en curso, y entre ellos el orden del archivo
+#   grupo 1  D1, D2      pendiente (Pablo)
+#   grupo 2  T1, T2      pendiente
+#   grupo 3  T5          sin estado — se muestra, no se esconde
+#
+# **D1 y D2 están escritos ARRIBA de T3 y T4 en el archivo**, así que este
+# orden sólo sale si el grupo le gana al orden de aparición: sin eso la lista
+# saldría D1, D2, T1…, y la aserción de abajo se pone roja.
+f = v["falta"]
+igual("lo que falta sale agrupado, y adentro de cada grupo como está escrito",
+      [p["id"] for p in f], ["T3", "T4", "D1", "D2", "T1", "T2", "T5"])
+igual("los cuatro grupos están representados (si no, el orden no verifica nada)",
+      sorted(set(p["grupo"] for p in f)), [0, 1, 2, 3])
+af("un diferido no falta: ya se decidió que no se hace todavía",
+   "T6" not in [p["id"] for p in f])
+af("un descartado tampoco", "T7" not in [p["id"] for p in f])
+af("y la historia no falta — **ni siquiera A3, que está pendiente adentro de "
+   "la historia**: es el único punto que hace que este filtro verifique algo",
+   not [p for p in f if p["id"] in ("A1", "A2", "A3")],
+   [p["id"] for p in f if p["id"] in ("A1", "A2", "A3")])
+igual("el que está en curso dice quién lo tomó",
+      [p["porque"] for p in f if p["id"] == "T3"], ["lo tomó coder-2"])
+af("y el que espera a una persona la nombra — con el nombre de la celda, no "
+   "con uno escrito en el código",
+   [p["porque"] for p in f if p["id"] == "D1"] == [
+       "pendiente (Pablo): nadie más lo puede mover"],
+   [p["porque"] for p in f if p["id"] == "D1"])
+igual("cada punto trae el rótulo de su grupo, para dibujarlo",
+      [p["rotulo_grupo"] for p in f if p["id"] in ("T3", "D1", "T1", "T5")],
+      ["en curso", "espera a una persona", "pendiente", "sin estado"])
+# Y que la cuenta cierre con la otra vía de contar lo mismo: los abiertos de
+# `contar()` menos los dos estados que no faltan. Dos números que salen de dos
+# funciones distintas y tienen que dar igual.
+igual("la cuenta de lo que falta cierra con los abiertos",
+      len(f),
+      v["cuenta_abiertos"]["pendiente"] + v["cuenta_abiertos"]["en curso"] +
+      v["cuenta_abiertos"][lector.SIN_ESTADO])
 
 # -----------------------------------------------------------------------
 print("§ 3 · Seguimiento SIN columna Estado (formato Finca 360)")

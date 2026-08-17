@@ -456,6 +456,13 @@ def unir(vista_consola, vista_taller):
                                else b.get("motivo_estado") or ""),
             "state": b.get("state") or "", "fuente": "cli",
         })
+    # Cada renglón dice **si es un fantasma**, y lo dice una sola vez. Vivía
+    # adentro de la función de orden de acá abajo, que era el único que lo
+    # necesitaba; el 2026-08-17 pasó a necesitarlo también la pantalla —para no
+    # poner a un muerto en la zona que pide que alguien se levante— y dos
+    # lugares calculando lo mismo es la regla 1 de este proyecto.
+    for f in salida:
+        f["fantasma"] = es_fantasma(f)
     # Primero el que necesita a una persona, después el que se movió recién.
     #
     # **Y los fantasmas al final**, aunque el CLI los dé por «esperando»: un
@@ -464,15 +471,29 @@ def unir(vista_consola, vista_taller):
     # con los que ya no existen. Se vio mirando la pantalla: dos agentes muertos
     # encabezaban la lista con cinco renglones de explicación cada uno.
     def orden(f):
-        fantasma = f.get("fuente") == "cli" and f.get("estado_consola") in (
-            "esperando", "trabajando", "en cola")
-        if fantasma:
+        if f["fantasma"]:
             return (3, 0, f.get("nombre") or "")
         pide = 0 if f.get("estado_consola") in ("esperando", "falló") else 1
         quieto = f.get("quieto_hace")
         return (pide, 10 ** 9 if quieto is None else quieto, f.get("nombre") or "")
     salida.sort(key=orden)
     return salida
+
+
+def es_fantasma(fila):
+    """El CLI lo da por vivo y de él no queda ningún archivo. **No está.**
+
+    Es el T37 dicho en una función: el registro del CLI no se limpia nunca, así
+    que un background que murió se queda `blocked` para siempre. Las dos cosas
+    no pueden ser ciertas a la vez, y capataz no elige por su cuenta cuál es la
+    verdad —lo dice en el renglón— pero **sí** se niega a tratarlo como alguien
+    que está esperando a una persona: eso pondría un muerto, en todas las
+    corridas, en el único lugar de la pantalla que existe para pedir que alguien
+    haga algo ahora. Un aviso que sale siempre enseña a ignorarse, y ése es el
+    que menos conviene que se ignore.
+    """
+    return (fila.get("fuente") == "cli" and
+            fila.get("estado_consola") in ("esperando", "trabajando", "en cola"))
 
 
 # Un renglón y no un párrafo: al lado de los agentes que sí trabajan, cinco

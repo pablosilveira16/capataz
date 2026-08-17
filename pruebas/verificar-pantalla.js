@@ -50,6 +50,14 @@ function af(descripcion, condicion, detalle) {
   }
 }
 
+/* Comparar dos listas y decir **cuál salió**, no sólo que no coincidieron: la
+ * § 13 compara órdenes de agentes, y «no dio» sin el orden obtenido obliga a
+ * reproducirlo a mano para entender qué pasó. */
+function igual(descripcion, obtenido, esperado) {
+  af(descripcion, JSON.stringify(obtenido) === JSON.stringify(esperado),
+     "obtuve " + JSON.stringify(obtenido) + ", esperaba " + JSON.stringify(esperado));
+}
+
 // --- los datos de verdad, producidos por el mismo código que sirve la API ----
 //
 // No es un JSON escrito a mano: es `capataz.estado()`, leyendo los repositorios
@@ -65,18 +73,51 @@ const datos = JSON.parse(execFileSync(
 // de las pestañas—, así que el nodo de mentira los guarda. Con un `setAttribute`
 // que no hace nada, `irA()` corre entero, no rompe, y no cambia nada: la § 10
 // pasaría en verde sin que la navegación funcionara.
+/* **Y desde el 2026-08-17 el nodo tiene hijos de verdad.** La zona de los
+ * agentes que trabajan ahora ya no se dibuja con un `innerHTML` sobre el
+ * contenedor: cada agente tiene su caja, creada una sola vez, y lo que cambia
+ * es el contenido de adentro. Con el nodo de antes —un objeto con una cadena—
+ * eso no se podía verificar: `appendChild` no existía y la § 13 no tendría cómo
+ * comprobar que la caja **es el mismo objeto** entre dos pintadas, que es
+ * exactamente lo que Pablo pidió.
+ *
+ * `innerHTML` es un accesor: leerlo devuelve lo que se escribió **más lo que
+ * dibujan los hijos**, así que las aserciones de las otras secciones —que leen
+ * `.innerHTML` de un contenedor— ven todo lo que hay abajo, igual que en un
+ * navegador. Escribirlo tira los hijos, también igual que en un navegador. */
 function nodo(attrs) {
   const a = Object.assign({}, attrs || {});
-  return {
-    textContent: "", innerHTML: "", className: "",
+  const n = {
+    textContent: "", className: "", hijos: [], parentNode: null,
     classList: { add() {}, remove() {} },
     getAttribute: (k) => (k in a ? a[k] : null),
     setAttribute: (k, v) => { a[k] = v; },
     removeAttribute: (k) => { delete a[k]; },
     hasAttribute: (k) => k in a,
     atributos: a,
+    appendChild(h) { h.parentNode = n; n.hijos.push(h); return h; },
+    removeChild(h) {
+      const i = n.hijos.indexOf(h);
+      if (i >= 0) n.hijos.splice(i, 1);
+      h.parentNode = null;
+      return h;
+    },
     querySelector: () => null, querySelectorAll: () => []
   };
+  let propio = "";
+  Object.defineProperty(n, "innerHTML", {
+    get() {
+      return propio + n.hijos.map((h) => h.dibujo()).join("");
+    },
+    set(v) {
+      propio = String(v);
+      n.hijos.forEach((h) => { h.parentNode = null; });
+      n.hijos = [];
+    }
+  });
+  n.dibujo = () => '<div class="' + n.className + '">' +
+    n.textContent + n.innerHTML + '</div>';
+  return n;
 }
 
 function armarPantalla() {
@@ -87,6 +128,10 @@ function armarPantalla() {
     agentes: nodo(), frescura: nodo(), pulso: nodo(),
     // Y los dos del taller, por lo mismo.
     taller: nodo(), alcance: nodo(),
+    // Las tres zonas nuevas: lo que pide una persona, los que trabajan ahora
+    // —que se dibuja con nodos y no con una cadena— y sus dos rótulos.
+    pide: nodo(), vivos: nodo(), "vivos-nota": nodo(),
+    "titulo-vivos": nodo(), "resto-nota": nodo(),
     // El shell: los dos lugares donde se dibuja el menú.
     "nav-principal": nodo(), tabbar: nodo(),
     // Y el de apariencia. El menú arranca cerrado, como en el marcado.
@@ -115,6 +160,10 @@ function armarPantalla() {
     document: {
       getElementById: (id) => nodos[id],
       querySelectorAll: (sel) => (sel === ".vista" ? vistas : []),
+      // La zona de los vivos crea sus cajas con esto. Sin `createElement` la
+      // pantalla se cae al primer agente que trabaja, que es la mitad de lo que
+      // este arnés mira.
+      createElement: () => nodo(),
       documentElement: raiz,
       body: nodo()
     },
@@ -153,6 +202,16 @@ function pintarCon(d) {
 }
 
 function copia(x) { return JSON.parse(JSON.stringify(x)); }
+
+/* Todo lo que la vista de agentes dibujó, sin importar en qué zona cayó cada
+ * uno. Desde el 2026-08-17 son tres —lo que pide una persona, los que trabajan
+ * ahora y el resto— y hay aserciones de dos clases: las que preguntan **qué**
+ * se dibujó usan esto, y las que preguntan **dónde** miran la zona a mano,
+ * porque en esas la zona es justamente lo que se afirma. */
+function htmlAgentes(p) {
+  return p.pide.innerHTML + p.vivos.innerHTML + p.taller.innerHTML +
+    p.agentes.innerHTML;
+}
 
 console.log("\n§ 1 · La pantalla dibuja algo con los datos de verdad");
 const pintado = pintarCon(datos);
@@ -342,9 +401,13 @@ af("y los ceros se marcan con la clase «cero» en vez de esconderse",
  * escribe `<img onerror=…>` en una celda, tiene que salir escapado. */
 const conHtml = copia(datos);
 conHtml.proyectos = [copia(legibles[0])];
-conHtml.proyectos[0].pendientes_de_pablo = [{
+// Va en `falta`, que es donde los títulos ajenos se dibujan desde el
+// 2026-08-17: es la lista de lo que hay que hacer, y la que trae el texto que
+// escribió otro proyecto.
+conHtml.proyectos[0].falta = [{
   id: "Z1", titulo: '<img src=x onerror="alert(1)">& "comillas"',
-  dias: 3, quien: "", estado: "pendiente"
+  dias: 3, quien: "", estado: "pendiente", grupo: 2, rotulo_grupo: "pendiente",
+  porque: "como está escrito en el seguimiento"
 }];
 const escapado = pintarCon(conHtml).cuerpo.innerHTML;
 af("un título con marcado ajeno sale escapado",
@@ -466,15 +529,26 @@ conAg.agentes = [
 conAg.agentes_todos = soloGitHub(conAg.agentes);
 const p7 = pintarCon(conAg);
 const hAg = p7.agentes.innerHTML;
+const hTodo7 = htmlAgentes(p7);
 af("la vista primaria dibuja a cada agente con su nombre",
-   hAg.indexOf("coder-1") >= 0 && hAg.indexOf("coder-2") >= 0, hAg.slice(0, 200));
+   hTodo7.indexOf("coder-1") >= 0 && hTodo7.indexOf("coder-2") >= 0,
+   hTodo7.slice(0, 200));
 af("y de qué proyecto es cada uno: sin eso no se sabe a quién ir a buscar",
-   hAg.indexOf("Uno") >= 0 && hAg.indexOf("Dos") >= 0);
+   hTodo7.indexOf("Uno") >= 0 && hTodo7.indexOf("Dos") >= 0);
 af("junta agentes de proyectos distintos, que es lo que la hace primaria",
-   hAg.indexOf("t1-una") >= 0 && hAg.indexOf("t2-otra") >= 0);
+   hTodo7.indexOf("t1-una") >= 0 && hTodo7.indexOf("t2-otra") >= 0);
 af("el que se cayó se pinta con su color y NO de verde",
    /a-caido/.test(hAg) && !/chip-estado verde/.test(hAg), hAg.slice(0, 300));
-af("y el que trabaja, con el suyo", /a-trabajando/.test(hAg));
+/* Y desde el 2026-08-17, **el que trabaja no está ahí abajo**: está arriba, en
+ * la zona de los que se mueven ahora. Las dos aserciones van juntas a
+ * propósito: la segunda es la que verifica que la zona no sea una copia, que es
+ * el bug que T41 encontró dibujando al mismo agente en dos secciones. */
+af("y el que trabaja va arriba, en la zona de los que se mueven ahora",
+   p7.vivos.innerHTML.indexOf("coder-1") >= 0 &&
+   /v-trabajando|v-late/.test(p7.vivos.innerHTML),
+   p7.vivos.innerHTML.slice(0, 240));
+af("y NO se lo dibuja además abajo: un agente, un lugar",
+   hAg.indexOf("coder-1") < 0, hAg.slice(0, 200));
 
 /* El demonio. Lo que se afirma no es que exista un `setInterval` —eso es una
  * cadena— sino con qué ritmos quedó armado y que la instantánea no pollee. */
@@ -513,7 +587,11 @@ function relectura(ctxt, agentes) {
   d.agentes_todos = soloGitHub(agentes);
   ctxt.FIRMA = "";
   ctxt.pintar(d);
-  return ctxt.document.getElementById("agentes").innerHTML;
+  // Las dos zonas: el que empuja un sha nuevo pasa a estar trabajando, así que
+  // la marca de «se despertó» tiene que sobrevivir el cambio de zona. Mirar
+  // sólo la de abajo haría que esta aserción se pusiera verde por mudanza.
+  return ctxt.document.getElementById("agentes").innerHTML +
+    ctxt.document.getElementById("vivos").innerHTML;
 }
 ctx.VISTOS = null;
 ctx.DESPIERTOS = {};
@@ -643,11 +721,20 @@ const conQue = copia(sesion);
 conQue.que = "Bash"; conQue.sobre = "Desplegar a QAS"; conQue.quieto_hace = 12;
 conQue.agentes = [agente("padre", "trabajando", 3)];
 conQue.agentes[0].que = "Edit"; conQue.agentes[0].sobre = "lector.py";
-const htmlQ = pintarCon(conTaller([conQue])).taller.innerHTML;
+/* Escribió hace 12 segundos, así que **está trabajando**: desde el 2026-08-17
+ * va a la zona de arriba y no a la lista de abajo. Lo que se afirma es lo
+ * mismo de siempre —qué herramienta, sobre qué, hace cuánto, y qué hace su
+ * subagente—, más la zona, que ahora es parte de la respuesta. */
+const p8q = pintarCon(conTaller([conQue]));
+const htmlQ = htmlAgentes(p8q);
 af("la sesión dice qué herramienta está usando y sobre qué",
    htmlQ.indexOf("Bash") >= 0 && htmlQ.indexOf("Desplegar a QAS") >= 0);
-af("y hace cuánto que no escribe", /class="hace"[\s\S]*?<i>hace/.test(htmlQ),
-   htmlQ.slice(0, 260));
+af("una que escribió hace 12 s va a la zona de los que trabajan ahora",
+   p8q.vivos.innerHTML.indexOf("Desplegar a QAS") >= 0 &&
+   p8q.taller.innerHTML.indexOf("Desplegar a QAS") < 0,
+   p8q.vivos.innerHTML.slice(0, 200));
+af("y hace cuánto que no escribe", /hace \d+ s/.test(p8q.vivos.innerHTML),
+   p8q.vivos.innerHTML.slice(0, 300));
 af("el subagente también dice qué hace",
    htmlQ.indexOf("Edit") >= 0 && htmlQ.indexOf("lector.py") >= 0);
 /* **Que un cambio de herramienta repinte.** Es la aserción que nació de un bug
@@ -659,10 +746,10 @@ const pDoble = pintarCon(conTaller([conQue]));
 const segundo = copia(conQue);
 segundo.que = "Edit"; segundo.sobre = "nube.py";
 pDoble.contexto.pintar(conTaller([segundo]));
-af("cambiar de herramienta repinta la sección: no se queda con la de antes",
-   pDoble.taller.innerHTML.indexOf("nube.py") >= 0 &&
-   pDoble.taller.innerHTML.indexOf("Desplegar a QAS") < 0,
-   pDoble.taller.innerHTML.slice(0, 220));
+af("cambiar de herramienta repinta: no se queda con la de antes",
+   htmlAgentes(pDoble).indexOf("nube.py") >= 0 &&
+   htmlAgentes(pDoble).indexOf("Desplegar a QAS") < 0,
+   pDoble.vivos.innerHTML.slice(0, 220));
 
 const sinQue = copia(sesion);
 sinQue.que = ""; sinQue.sobre = "";
@@ -693,10 +780,14 @@ function conConsola(background, extra) {
   // es la que se dibuja— con el estado del CLI en `estado_consola`.
   d.taller = Object.assign({}, d.taller, { ok: true, error: "",
     alcance: "esta máquina · ahora", sesiones: [],
+    // Backgrounds **cuyo archivo existe**: eso es lo que los distingue de un
+    // fantasma, y por eso `fuente` dice que hablaron las dos fuentes y
+    // `fantasma` es falso. Un cli-solo con `esperando` es, por definición, uno
+    // que murió sin avisar (T37) y tiene su propio caso más abajo.
     agentes_maquina: background.map((b) => Object.assign({}, b, {
       estado_consola: b.estado, motivo_consola: b.motivo_estado,
-      viva: null, agentes: [], fuente: "cli", proyecto: "",
-      motivo_sin_agentes: "de este agente ya no queda archivo" })) });
+      viva: null, agentes: [], fuente: "archivo+cli", fantasma: false,
+      proyecto: "", motivo_sin_agentes: "" })) });
   d.agentes = [];
   d.agentes_todos = d.taller.agentes_maquina.slice();
   d.consola = Object.assign({
@@ -728,25 +819,69 @@ af("el alcance de la consola está escrito y dice que es esta máquina",
    que es lo que separa un agente del de abajo de un vistazo. La regla no
    cambió —lo que pide una persona salta, lo sabido va apagado— y por eso las
    aserciones siguen siendo las mismas con otra clase. */
-af("«esperando» se pinta ámbar: no está roto, está trabado esperando a alguien",
-   /f-ambar/.test(htmlC), htmlC.slice(0, 200));
-af("y dice cómo se destraba", htmlC.indexOf("necesita a una persona") >= 0);
+/* **El que está trabado ya no es un renglón un poco más arriba: tiene zona
+   propia.** Fue el pedido de Pablo del 2026-08-17 —«cuando se traba con una
+   pregunta, que la pantalla se vea bien rápido eso»— y por eso estas
+   aserciones miran **la zona** y no sólo el color: para notar que algo subió un
+   lugar en una lista hay que estar leyendo la lista, que es justo lo que no
+   pasa cuando uno mira un tablero de reojo. */
+const hTodo9 = htmlAgentes(p9);
+af("«esperando» va a la zona de arriba, la que pide una persona",
+   p9.pide.innerHTML.indexOf("el b1") >= 0 &&
+   p9.pide.innerHTML.indexOf("Trabado") >= 0, p9.pide.innerHTML.slice(0, 200));
+af("y no queda además abajo, mezclado con los demás",
+   htmlC.indexOf("el b1") < 0, htmlC.slice(0, 200));
+af("y dice cómo se destraba",
+   p9.pide.innerHTML.indexOf("necesita a una persona") >= 0);
 af("«no sé» no se pinta de ningún color, y lleva la palabra cruda del CLI",
    /nose/.test(htmlC) && htmlC.indexOf("hibernating") >= 0);
-af("«falló» sí es rojo: eso sí es un incendio", /f-rojo/.test(htmlC));
+af("«falló» sí es rojo: eso sí es un incendio",
+   /pide-rojo/.test(p9.pide.innerHTML), p9.pide.innerHTML.slice(0, 200));
 af("«terminado» va apagado: es un hecho sabido, no un logro",
    /f-apagado/.test(htmlC));
 af("y el estado se sigue diciendo con todas las letras, no sólo con un color",
-   htmlC.indexOf("terminado") >= 0 && htmlC.indexOf("esperando") >= 0);
+   hTodo9.indexOf("terminado") >= 0 && hTodo9.indexOf("esperando") >= 0);
 /* La anti-vacua de las cuatro de arriba: sin esto pasarían con una pantalla
    que no pinta de verde nunca. */
-af("y el que se está moviendo SÍ lleva el borde vivo", /f-verde/.test(
+af("y el que se está moviendo SÍ lleva el color de vivo", /v-late/.test(
    pintarCon(conConsola([Object.assign(bg("bx", "trabajando"),
-     { quieto_hace: 0 })])).taller.innerHTML));
+     { quieto_hace: 0 })])).vivos.innerHTML));
 af("el asa para abrirlo se muestra, y es un texto: capataz no lo corre",
-   htmlC.indexOf("claude attach b1") >= 0);
-af("el que espera a una persona va primero, antes que el que trabaja",
-   htmlC.indexOf("el b1") < htmlC.indexOf("el b2"));
+   p9.pide.innerHTML.indexOf("claude attach b1") >= 0);
+/* Los dos lados de la misma cosa, y la segunda es la que la salva de ser
+   vacua: una pantalla que mandara a **todos** a la zona de «pide una persona»
+   pasaría la primera sin despeinarse. */
+af("el que espera a una persona está arriba, y el que trabaja no",
+   p9.pide.innerHTML.indexOf("el b2") < 0 &&
+   p9.vivos.innerHTML.indexOf("el b2") >= 0, p9.vivos.innerHTML.slice(0, 200));
+
+/* **Y un fantasma no espera a nadie.** El CLI da por `esperando` a todo
+   background que murió sin avisar —su registro no se limpia nunca (T37)—, así
+   que si eso subiera a la zona de arriba, la zona estaría ocupada en todas las
+   corridas y el cartel que se hizo para que un pedido se vea rápido sería el
+   aviso que enseña a ignorarse. **Se encontró mirando la pantalla**, no acá:
+   los dos primeros carteles de «trabado» eran dos agentes muertos hacía horas. */
+const fantasma = Object.assign(bg("b7", "esperando", "trabado: necesita a una persona"),
+  { quieto_hace: null });
+const p9e = pintarCon(conConsola([fantasma]));
+p9e.contexto.pintar((function () {
+  const d = conConsola([fantasma]);
+  d.taller.agentes_maquina.forEach(function (f) {
+    f.fuente = "cli"; f.fantasma = true;
+    f.motivo_consola = "el CLI lo da por «esperando» pero ya no queda ningún " +
+      "archivo suyo: el registro quedó viejo, no está esperando a nadie";
+  });
+  d.agentes_todos = d.taller.agentes_maquina.slice();
+  return d;
+})());
+af("un background del que no queda archivo NO ocupa la zona que pide una persona",
+   p9e.pide.innerHTML.indexOf("el b7") < 0, p9e.pide.innerHTML.slice(0, 200));
+af("ni la de los que trabajan: el CLI afirma algo que su archivo desmiente",
+   p9e.vivos.innerHTML.indexOf("el b7") < 0, p9e.vivos.innerHTML.slice(0, 200));
+af("pero se muestra igual, abajo, y con el motivo: capataz no lo esconde",
+   p9e.taller.innerHTML.indexOf("el b7") >= 0 &&
+   p9e.taller.innerHTML.indexOf("el registro quedó viejo") >= 0,
+   p9e.taller.innerHTML.slice(0, 260));
 
 /* El estado de un background NO se recalcula con el reloj, al revés que el de
    una rama y el de un subagente. Aquéllos son «hace cuánto que no se mueve»;
@@ -960,7 +1095,9 @@ af("y es más chico que el de «trabajando»: es una banda para mirar, no un est
 function conLatido(seg) {
   const s = copia(sesion);
   s.quieto_hace = seg; s.que = "Bash"; s.sobre = "algo"; s.agentes = [];
-  return pintarCon(conTaller([s])).taller.innerHTML;
+  // Las dos zonas: la que late está arriba y la de hace 34 minutos abajo, y lo
+  // que esta sección afirma es el latido, no en cuál cayó.
+  return htmlAgentes(pintarCon(conTaller([s])));
 }
 const activa = conLatido(0);
 const dormida = conLatido(34 * 60);
@@ -975,6 +1112,173 @@ af("justo encima, no",
    !/class="late"/.test(conLatido(datos.umbrales_taller.latiendo + 1)));
 af("y la que late sigue diciendo que está prendida: el latido no es un estado",
    activa.indexOf("prendida") >= 0, activa.slice(0, 220));
+
+/* -------------------------------------------------------------------------
+   § 13 · Los que trabajan ahora: orden fijo y el renglón que se actualiza
+          por adentro
+
+   El pedido de Pablo del 2026-08-17: «los agentes que están vivos tienen que
+   quedar fijo y que se vaya actualizando el contenido de adentro, no que vayan
+   cambiando el orden a medida que mete una acción cada uno».
+
+   Son **dos** cosas y ninguna alcanza sola, así que hay aserciones de las dos:
+
+     · el orden no se rehace aunque el servidor mande otro —y la anti-vacua de
+       eso es que una pantalla recién abierta **sí** respeta el que le mandan,
+       porque si no, «no baraja» pasaría con una lista que siempre sale igual
+       por casualidad—;
+     · la caja de cada agente es **el mismo objeto del DOM** entre dos pintadas,
+       y lo que cambia es lo de adentro. Sin esto, el orden podría quedar fijo y
+       aun así el renglón que estás leyendo dejaría de existir dos veces por
+       segundo, que es la mitad del problema que se quiso arreglar.
+------------------------------------------------------------------------- */
+console.log("\n§ 13 · Los vivos: orden fijo y contenido que se actualiza adentro");
+
+function ses(nombre, quieto, que, sobre) {
+  return Object.assign(copia(sesion), {
+    sesion: "s-" + nombre, nombre: nombre, quieto_hace: quieto,
+    que: que || "Bash", sobre: sobre || "algo", agentes: []
+  });
+}
+/* El orden **dibujado**, leído del HTML de la zona y no de la estructura de
+   nodos. Es a propósito: si esto mirara `hijos`, una pantalla que volviera a
+   armar la zona con un `innerHTML` —el bug que se quiere evitar— daría lista
+   vacía y se pondría roja por el motivo equivocado, sin decir nunca que el
+   orden se barajó. Así, la aserción se pone roja diciendo qué orden salió. */
+function nombresDe(p) {
+  return (p.vivos.innerHTML.match(/class="nombre">agente-[abcd]/g) || [])
+    .map(function (t) { return t.slice(t.indexOf(">") + 1); });
+}
+
+const tres = [ses("agente-a", 1), ses("agente-b", 2), ses("agente-c", 3)];
+const p13 = pintarCon(conTaller(copia(tres)));
+af("los que trabajan se dibujan arriba, cada uno en su propia caja",
+   p13.vivos.hijos.length === 3, String(p13.vivos.hijos.length));
+const orden1 = nombresDe(p13);
+igual("y en la primera lectura salen como los manda el servidor",
+      orden1, ["agente-a", "agente-b", "agente-c"]);
+
+/* Lo mismo, del revés, en una pantalla **recién abierta**: acá el orden del
+   servidor sí manda. Es la anti-vacua de la aserción de abajo. */
+const pRev = pintarCon(conTaller([copia(tres[2]), copia(tres[1]), copia(tres[0])]));
+igual("una pantalla nueva respeta el orden que le mandan (si no, «no baraja» " +
+      "pasaría con cualquier lista)",
+      nombresDe(pRev), ["agente-c", "agente-b", "agente-a"]);
+
+/* Y ahora el pedido: la MISMA pantalla, con el orden dado vuelta —que es lo que
+   pasa de verdad cuando otro agente escribe una línea y pasa a ser el que se
+   movió recién—. No se tiene que mover nadie. */
+p13.contexto.pintar(conTaller([copia(tres[2]), copia(tres[1]), copia(tres[0])]));
+igual("y si el servidor cambia el orden, la pantalla NO baraja: cada uno se " +
+      "queda en su lugar", nombresDe(p13), orden1);
+
+/* El mismo nodo, no uno nuevo con el mismo dibujo. */
+const cajaA = p13.vivos.hijos[0];
+const antesB = p13.vivos.hijos[1].innerHTML;
+const cambiado = copia(tres);
+cambiado[0].que = "Edit";
+cambiado[0].sobre = "nube.py";
+p13.contexto.pintar(conTaller(cambiado));
+af("la caja del primero es el MISMO nodo después de repintar",
+   p13.vivos.hijos[0] === cajaA);
+af("y lo que cambió es su contenido de adentro",
+   cajaA.innerHTML.indexOf("nube.py") >= 0, cajaA.innerHTML.slice(0, 200));
+af("mientras que la del que no cambió no se reescribió",
+   p13.vivos.hijos[1].innerHTML === antesB,
+   p13.vivos.hijos[1].innerHTML.slice(0, 120));
+
+/* El reloj es el otro nodo, y es el que cambia siempre. Se mueve el reloj de la
+   máquina para atrás —que es lo que hace el tiempo— y se pide un tick: el
+   contador tiene que avanzar **sin que se reescriba una línea de HTML**. */
+const nodoA = p13.contexto.NODOS_VIVOS[Object.keys(p13.contexto.NODOS_VIVOS)[0]];
+const relojAntes = nodoA.reloj.textContent;
+const accionAntes = nodoA.accion.innerHTML;
+p13.contexto.T_RECIBIDO = Date.now() - 300000;
+p13.contexto.tick();
+af("el contador avanza solo entre dos lecturas del servidor",
+   nodoA.reloj.textContent !== relojAntes,
+   relojAntes + " → " + nodoA.reloj.textContent);
+af("y avanzarlo no reescribe lo que el agente está haciendo",
+   nodoA.accion.innerHTML === accionAntes);
+af("ni cambia la caja por otra", p13.vivos.hijos[0] === cajaA);
+
+/* Uno nuevo: **al final**, aunque el servidor lo mande primero. Si entrara
+   arriba, empujaría un lugar a todos los que se están leyendo. */
+const conNuevo = [ses("agente-d", 1)].concat(copia(cambiado));
+p13.contexto.pintar(conTaller(conNuevo));
+igual("un agente nuevo entra al final, aunque el servidor lo mande primero",
+      nombresDe(p13), ["agente-a", "agente-b", "agente-c", "agente-d"]);
+
+/* Y el que deja de trabajar se va de la zona: su caja se saca del contenedor.
+   Sin esto, la zona sería una lista que sólo crece. */
+p13.contexto.pintar(conTaller([copia(cambiado[0])]));
+igual("el que deja de trabajar se va de arriba", nombresDe(p13), ["agente-a"]);
+af("y su caja se sacó del DOM, no quedó escondida",
+   p13.vivos.hijos.length === 1, String(p13.vivos.hijos.length));
+
+/* -------------------------------------------------------------------------
+   § 14 · Un proyecto: lo que falta, y que el orden no se presente como una
+          opinión de capataz
+
+   «Fuerte foco en los puntos pendientes y priorizando por importancia de la
+   funcionalidad.» La importancia no está escrita en ninguna celda de ningún
+   seguimiento, así que lo que se verifica es lo otro: que la pantalla dibuje
+   lo que `lector.falta()` ordenó **sin volver a ordenarlo** (dos criterios en
+   dos archivos son la regla 1 rota), que el tope diga lo que no entró, y que
+   la regla del orden esté escrita al lado del orden.
+------------------------------------------------------------------------- */
+console.log("\n§ 14 · Un proyecto: lo que falta");
+
+function conFalta(puntos) {
+  const d = copia(datos);
+  d.proyectos = [copia(legibles[0])];
+  d.proyectos[0].falta = puntos;
+  return d;
+}
+function punto(id, grupo, rotulo, titulo) {
+  return { id: id, titulo: titulo || ("el punto " + id), grupo: grupo,
+           rotulo_grupo: rotulo, porque: "x", dias: 3, quien: "",
+           estado: "pendiente" };
+}
+const cuatro = [
+  punto("T1", 0, "en curso"), punto("D9", 1, "espera a una persona"),
+  punto("T2", 2, "pendiente"), punto("T3", 3, "sin estado")
+];
+const h14 = pintarCon(conFalta(cuatro)).cuerpo.innerHTML;
+af("lo que falta se dibuja, y en el orden que decidió el lector",
+   h14.indexOf("T1") < h14.indexOf("D9") &&
+   h14.indexOf("D9") < h14.indexOf("T2") &&
+   h14.indexOf("T2") < h14.indexOf("T3"), h14.slice(0, 200));
+af("cada grupo dice cómo se llama, para que el orden se entienda",
+   h14.indexOf("en curso") >= 0 && h14.indexOf("espera a una persona") >= 0 &&
+   h14.indexOf("sin estado") >= 0);
+af("y cada punto lleva el color de su grupo",
+   /class="punto g0"/.test(h14) && /class="punto g1"/.test(h14),
+   h14.slice(0, 200));
+/* La regla 3 puesta en el orden: capataz **dice** que la importancia no la
+   sabe. Un orden sin su regla al lado se lee como una decisión suya. */
+af("y la pantalla dice con qué ordenó, y que la importancia no la sabe",
+   h14.indexOf("orden en que está escrito") >= 0 &&
+   h14.indexOf("no está escrito en ninguna celda") >= 0, h14.slice(0, 400));
+
+/* El tope, y su mitad honesta: lo que no entró se dice. Un corte silencioso se
+   lee como «esto es todo lo que falta», que es la peor de las dos mentiras. */
+const muchos = [];
+for (let i = 0; i < 20; i++) muchos.push(punto("T" + (100 + i), 2, "pendiente"));
+muchos.push(punto("ZZ9", 2, "pendiente", "el que no entra"));
+const hTope = pintarCon(conFalta(muchos)).cuerpo.innerHTML;
+af("con más puntos que el tope, se dibujan sólo los primeros",
+   hTope.indexOf("el que no entra") < 0, hTope.slice(0, 200));
+af("y se dice cuántos quedaron afuera: un corte en silencio se lee como que " +
+   "no falta nada más", /y \d+ más/.test(hTope), hTope.slice(0, 300));
+af("y se dice dónde están de verdad: el seguimiento del proyecto",
+   hTope.indexOf("que es la verdad") >= 0);
+
+/* Cero abiertos no es lo mismo que no haberlo podido leer, y las dos se
+   parecen mucho en una pantalla vacía. */
+const hCero = pintarCon(conFalta([])).cuerpo.innerHTML;
+af("un proyecto sin puntos abiertos lo dice con todas las letras",
+   hCero.indexOf("ningún punto abierto") >= 0, hCero.slice(0, 200));
 
 console.log("\nASERCIONES: " + ASER + "\nROJAS: " + ROJAS);
 process.exit(ROJAS ? 1 : 0);

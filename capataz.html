@@ -173,8 +173,22 @@ body {
 @media (max-width: 699px) {
   body { padding-bottom: calc(66px + env(safe-area-inset-bottom)); }
 }
+/* ---------------------------------------------------------------------------
+   El ancho, y cuál de los dos manda ahora
+
+   La hoja nació clavada en 340/640 px porque el requisito que motiva el
+   proyecto es leerlo desde un teléfono (D1), y eso sigue en pie. Lo que cambió
+   el 2026-08-17 es **cuál de los dos anchos se usa todo el día**: en un monitor
+   de 2000 px la hoja eran 640 px en el medio y el resto fondo, con cuatro
+   agentes trabajando que no entraban en la primera pantalla.
+
+   Así que el escritorio deja de ser «el teléfono estirado» y la hoja se suelta.
+   El angosto **no se toca**: `verificar-angosto.py` § 1 mide que ninguna
+   declaración de ancho pase de 360 px fuera de una media query ancha, así que
+   todo lo de acá abajo vive adentro de una y el arnés lo vigila solo.
+--------------------------------------------------------------------------- */
 .hoja { max-width: 340px; margin: 0 auto; }
-@media (min-width: 700px) { .hoja { max-width: 640px; } }
+@media (min-width: 700px) { .hoja { max-width: 100%; margin: 0; } }
 
 /* ---------------------------------------------------------------------------
    El shell: barra arriba, menú al costado en pantalla ancha, tabbar abajo en
@@ -210,14 +224,46 @@ body {
 
 .app { display: block; }
 @media (min-width: 700px) {
-  .app { display: flex; gap: 14px; align-items: flex-start; max-width: 900px;
-         margin: 0 auto; }
+  /* El tope de 900 px era lo que dejaba la mitad del monitor en fondo. Ahora
+     hay uno igual pero mucho más alto: sin ningún tope, en un monitor 4K un
+     renglón de texto cruza 3800 px y deja de leerse — el ojo pierde el
+     principio de la línea siguiente. */
+  .app { display: flex; gap: 18px; align-items: flex-start; max-width: 1720px;
+         margin: 0 auto; padding: 12px 18px 0; }
   .lateral { position: sticky; top: 52px; width: 190px; flex: 0 0 190px;
              padding-top: 12px; }
   .contenido { flex: 1 1 auto; min-width: 0; }
   .tabbar-envoltorio { display: none; }
 }
 @media (max-width: 699px) { .lateral { display: none; } }
+
+/* ---------------------------------------------------------------------------
+   La grilla, que es todo lo que el escritorio agrega.
+
+   Las columnas se cuentan por saltos y **no con `minmax(420px, 1fr)`**, que
+   sería la forma natural: un `minmax` con un mínimo en píxeles es una
+   declaración de ancho mayor a 360 px y la pone roja `verificar-angosto.py`
+   § 1. Con `minmax(0, 1fr)` la cuenta de columnas la decide la media query,
+   que es la que ya sabe en qué pantalla está.
+--------------------------------------------------------------------------- */
+.grilla { display: grid; gap: 10px; grid-template-columns: 1fr; }
+@media (min-width: 760px)  { .grilla { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1180px) { .grilla { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1560px) { .grilla { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+/* «El resto» también es una grilla, y por el mismo motivo: son los agentes que
+   trabajaron hace rato, cada uno con su lista de subagentes, y apilados a ancho
+   completo ocupan pantallas enteras para decir que nadie se está moviendo.
+   `align-items: start` para que una fila con seis subagentes no estire a la de
+   al lado hasta su alto. */
+@media (min-width: 1080px) {
+  #taller { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px; align-items: start; }
+  #taller > .fila { margin: 0; }
+}
+/* Los proyectos son tarjetas más altas: dos columnas como mucho, o el texto de
+   un punto queda en una tira de cuatro palabras de ancho. */
+.grilla-ancha { display: grid; gap: 12px; grid-template-columns: 1fr; }
+@media (min-width: 1080px) { .grilla-ancha { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* El menú se dibuja de `VISTAS`, en un solo lugar: una vista nueva aparece en
    el lateral y en la tabbar sin tocar el marcado. */
@@ -292,6 +338,71 @@ nav.principal button[aria-current="page"] { background: var(--fondo-13); color: 
        border: 1px solid var(--borde-7); white-space: nowrap; }
 .tag-rol { background: var(--fondo-9); color: var(--texto-10); }
 
+/* ---------------------------------------------------------------------------
+   Los que están trabajando ahora: la zona de arriba
+
+   El pedido del 2026-08-17: «los 4 agentes que realmente se están moviendo
+   ahora tienen que ser lo principal, que se note la diferencia y tengan mayor
+   información». Hasta hoy un agente vivo era un renglón idéntico al de uno
+   caído hace nueve horas, con un borde verde de 4 px como toda diferencia.
+
+   Acá la tarjeta es más grande, entra en una grilla y muestra lo que en un
+   renglón no entraba: la herramienta y sobre qué, el reloj en cuerpo grande,
+   la rama y el punto, y los subagentes que están corriendo abajo.
+
+   **Y no hay ningún aviso nuevo que salga siempre.** Lo que un agente sano
+   dibuja acá es exactamente lo que estaba dibujando antes, más grande.
+--------------------------------------------------------------------------- */
+.vivo { border: 1px solid var(--borde-3); border-left: 5px solid var(--latido);
+        border-radius: 12px; padding: 11px 13px; background: var(--fondo-10); }
+.vivo .nombre { font-size: 17px; font-weight: 600; }
+.vivo .cab { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.vivo .cab-txt { display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+                 min-width: 0; }
+/* Dos verdes y no uno: el que escribe en este segundo y el que está pensando.
+   Los dos trabajan; si fueran del mismo color, el latido dejaría de decir algo. */
+.v-late       { border-left-color: var(--latido); background: var(--fondo-10); }
+.v-trabajando { border-left-color: var(--borde-11); background: var(--fondo-6); }
+.vivo .accion .tenue { color: var(--texto-2); font-size: 13px; }
+/* El reloj a la derecha y en cuerpo grande: de un agente vivo, «hace cuánto»
+   es el dato que se mira de reojo desde dos metros. */
+.vivo .reloj-grande { margin-left: auto; font-size: 15px; font-weight: 600;
+                      font-variant-numeric: tabular-nums; color: var(--texto-9);
+                      white-space: nowrap; }
+.vivo .accion { margin-top: 7px; font-size: 15px; line-height: 1.35; }
+.vivo .accion b { font-weight: 700; }
+.vivo .accion span { color: var(--texto-8); }
+.vivo .dato { margin-top: 5px; font-size: 12px; color: var(--texto-4); }
+.vivo .dato b { color: var(--texto-8); font-weight: 600; }
+/* Los subagentes de un agente vivo: una línea cada uno, con su propio punto de
+   latido. Es la información que antes obligaba a bajar cinco renglones. */
+.vivo .sub { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--borde-1);
+             font-size: 12px; color: var(--texto-7); display: flex;
+             flex-wrap: wrap; gap: 5px; align-items: baseline; }
+.vivo .sub em { font-style: normal; color: var(--texto-4); }
+.vivo .sub .reloj-sub { margin-left: auto; color: var(--texto-2);
+                        font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ---------------------------------------------------------------------------
+   El que se trabó, que es lo único que pide que alguien se levante
+
+   «Cuando se traba con una pregunta, que la pantalla se vea bien rápido eso.»
+   Por eso tiene zona propia arriba de todo, en ámbar y a ancho completo — y no
+   un lugar más arriba en la misma grilla: si sólo cambiara de posición, el que
+   mira tendría que darse cuenta de que cambió de posición.
+
+   **Casi siempre está vacía y no dibuja nada**, que es lo que la salva del
+   corolario de la regla 3: un cartel que sale en todas las corridas enseña a
+   ignorarse, y éste tiene que leerse el día que aparece.
+--------------------------------------------------------------------------- */
+.pide { border: 2px solid var(--borde-13); background: var(--fondo-11);
+        border-radius: 12px; padding: 12px 14px; margin: 0 0 12px; }
+.pide.pide-rojo { border-color: var(--borde-5); background: var(--fondo-3); }
+.pide .titulo-pide { font-size: 16px; font-weight: 700; color: var(--texto-14); }
+.pide.pide-rojo .titulo-pide { color: var(--texto-11); }
+.pide .quien-pide { font-size: 15px; margin-top: 3px; }
+.pide .porque { color: var(--texto-8); font-size: 12px; }
+
 .hace { margin-top: 5px; font-size: 13px; display: flex; flex-wrap: wrap;
         gap: 6px; align-items: baseline; }
 .hace b { font-size: 13px; white-space: nowrap; }
@@ -356,6 +467,51 @@ h3 { font-size: 12px; margin: 12px 0 5px; text-transform: uppercase;
 
 .tarjeta { background: var(--fondo-6); border: 1px solid var(--borde-2); border-radius: 10px;
            padding: 12px; margin: 12px 0; }
+
+/* ---------------------------------------------------------------------------
+   Un proyecto: lo que falta arriba, y el resto abajo
+
+   «El seguimiento de cada proyecto tiene formato tipo diario que no sirve para
+   nada; tiene que ser visual, con foco en los puntos pendientes y priorizando
+   por importancia.» El diario eran los conteos, después la cuadrilla, después
+   las ramas, después los últimos commits: para saber qué falta había que bajar
+   por el medio de todo eso y leer una lista sin orden.
+
+   **La importancia no se puede afirmar** —no está escrita en ningún
+   seguimiento— así que el orden sale de lo medible y la regla se dice al lado,
+   en un renglón tenue. Lo decide `lector.falta()`, en un solo lugar.
+--------------------------------------------------------------------------- */
+.punto { display: flex; gap: 8px; align-items: baseline; padding: 6px 0 6px 9px;
+         border-top: 1px solid var(--borde-1); border-left: 3px solid transparent; }
+.punto:first-child { border-top: 0; }
+/* `flex: 0 0 auto`, y no es decoración: sin esto el flex le come el ancho al
+   identificador y «T11» sale escrito **en vertical**, una letra por renglón.
+   Se vio mirando la pantalla; para un arnés que busca el texto está entero. */
+.punto .id { flex: 0 0 auto; margin-right: 0; }
+.punto .txt { flex: 1 1 auto; min-width: 0; font-size: 13px; }
+.punto .cuando { flex: 0 0 auto; font-size: 11px; color: var(--texto-1);
+                 white-space: nowrap; }
+/* El color del grupo, que es el mismo que su chip. Un punto tomado y uno que
+   espera a una persona se distinguen sin leer la palabra. */
+.g0 { border-left-color: var(--borde-8); }
+.g1 { border-left-color: var(--borde-10); }
+.g2 { border-left-color: var(--borde-12); }
+.g3 { border-left-color: var(--borde-4); }
+.grupo { display: flex; align-items: baseline; gap: 7px; margin: 11px 0 2px; }
+.grupo b { font: 600 11px/1 -apple-system, BlinkMacSystemFont, sans-serif;
+           text-transform: uppercase; letter-spacing: .7px; color: var(--texto-2); }
+.grupo i { font-style: normal; font-size: 11px; color: var(--texto-1); }
+/* Cuánto de lo que hay escrito está cerrado. Es una sola barra y dice los dos
+   números al lado: una barra sin su cuenta es una barra que se interpreta. */
+.barra { height: 7px; border-radius: 99px; background: var(--fondo-14);
+         overflow: hidden; margin: 7px 0 3px; }
+.barra span { display: block; height: 100%; background: var(--borde-11); }
+/* Las dos columnas de adentro de una tarjeta de proyecto: lo que falta manda y
+   se lleva el ancho; el estado del repositorio acompaña. */
+@media (min-width: 700px) {
+  .dos-columnas { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+                  gap: 16px; align-items: start; }
+}
 
 /* Los números por estado. Envuelven; nunca hacen una fila más ancha que la
    pantalla. Y van los CINCO, con los ceros: «pendiente 12» no dice nada al
@@ -528,15 +684,27 @@ details p { font-size: 11px; color: var(--texto-2); margin: 5px 0 0; }
            miraba tenía que asociarlas de memoria. Una pantalla se parte por
            pregunta, y acá la pregunta es una sola: quién está trabajando. -->
       <section class="vista" data-vista="agentes">
-        <h3>Agentes</h3>
+        <!-- Lo que pide una persona, arriba de todo y casi siempre vacío. -->
+        <div id="pide"></div>
+
+        <h3 id="titulo-vivos">Trabajando ahora</h3>
         <div class="tenue" id="alcance">…</div>
+        <!-- **Esta grilla no se redibuja con `innerHTML`.** Cada agente tiene
+             su nodo, se crea una vez y se actualiza por adentro: es lo que hace
+             que el que estás leyendo no se te vaya de lugar cuando otro escribe
+             una línea. `pintarVivos()` es quien la reconcilia. -->
+        <div class="grilla" id="vivos"></div>
+        <div id="vivos-nota"></div>
+
+        <h3>El resto</h3>
+        <div class="muy-tenue" id="resto-nota"></div>
         <div id="taller"></div>
         <div id="agentes"></div>
       </section>
 
       <section class="vista" data-vista="proyectos" hidden>
         <h3>Los proyectos</h3>
-        <div id="cuerpo"></div>
+        <div class="grilla-ancha" id="cuerpo"></div>
       </section>
 
       <div class="pie muy-tenue">
@@ -604,21 +772,12 @@ function hace(seg) {
   return "hace " + Math.round(seg / 86400) + " días";
 }
 
-function listaPuntos(puntos, umbralViejo) {
-  if (!puntos.length) return '<div class="nada">ninguno</div>';
-  var h = "<ul>";
-  for (var i = 0; i < puntos.length; i++) {
-    var p = puntos[i];
-    var viejo = (umbralViejo !== undefined && p.dias !== null &&
-                 p.dias >= umbralViejo) ? " viejo" : "";
-    h += '<li class="' + viejo + '">' +
-         '<span class="id">' + esc(p.id) + '</span>' +
-         '<span class="titulo">' + esc(p.titulo.slice(0, 150)) + '</span>' +
-         '<div class="meta">' + (p.quien ? esc(p.quien) + " · " : "") +
-         esc(antiguedad(p.dias)) + '</div></li>';
-  }
-  return h + "</ul>";
-}
+/* Acá vivía `listaPuntos()`, que dibujaba «Te bloquean a vos» y «En curso» como
+   dos listas sueltas en el medio de la tarjeta. Las dos son ahora los dos
+   primeros grupos de `bloqueFalta()` —el mismo dato en un solo lugar y en el
+   orden que decide `lector.falta()`—, así que la función quedó sin nadie que la
+   llame y se borró en el mismo commit. Una función muerta no se pone roja: se
+   queda ahí hasta que alguien la lee como si corriera (T35). */
 
 function bloqueCuadrilla(pr) {
   var h = "<h3>La cuadrilla ahora</h3>";
@@ -726,6 +885,65 @@ function bloqueCI(pr) {
   return h;
 }
 
+/* Cuántos puntos de un proyecto se dibujan. Con los 49 de Finca 360 la tarjeta
+   vuelve a ser el diario que este cambio vino a sacar; con doce entra la
+   decisión de qué se agarra después. **Y lo que no entra se dice**: un corte
+   silencioso se lee como «esto es todo lo que falta», que es la mentira más
+   fácil de dejar en un tablero. */
+var TOPE_FALTA = 12;
+
+/* Cortar por la última palabra entera y avisar que se cortó. Los títulos de los
+   seguimientos ajenos son párrafos: cortados a la cuenta exacta terminan en
+   «…es «en curso huérfa», que se lee como un archivo roto y no como un texto
+   largo. Se vio mirando el teléfono. */
+function recortar(t, n) {
+  t = String(t || "");
+  if (t.length <= n) return t;
+  var corte = t.slice(0, n);
+  var espacio = corte.lastIndexOf(" ");
+  return (espacio > n * 0.6 ? corte.slice(0, espacio) : corte) + "…";
+}
+
+function bloqueFalta(pr) {
+  var f = pr.falta || [];
+  var h = '<h3>Lo que falta · ' + f.length + '</h3>';
+  if (!f.length) {
+    return h + '<div class="nada">ningún punto abierto en el seguimiento</div>';
+  }
+  /* La regla del orden, escrita al lado del orden. Un orden sin su regla se lee
+     como una opinión de capataz sobre qué es más importante — y capataz no
+     tiene ninguna, porque eso no está escrito en ninguna celda de ningún
+     seguimiento. Lo que se ordena es lo que sí está medido. */
+  h += '<div class="muy-tenue">Ordenado por lo tomado, lo que espera a una ' +
+    'persona, y <b>el orden en que está escrito el seguimiento</b>. Cuál es más ' +
+    'importante no está escrito en ninguna celda, así que capataz no lo ' +
+    'afirma.</div>';
+  var grupo = -1;
+  var dibujados = 0;
+  for (var i = 0; i < f.length && dibujados < TOPE_FALTA; i++) {
+    var p = f[i];
+    if (p.grupo !== grupo) {
+      grupo = p.grupo;
+      var cuantos = 0;
+      for (var j = 0; j < f.length; j++) if (f[j].grupo === grupo) cuantos += 1;
+      h += '<div class="grupo"><b>' + esc(p.rotulo_grupo) + '</b><i>' +
+        cuantos + '</i></div>';
+    }
+    h += '<div class="punto g' + esc(p.grupo) + '">' +
+      '<span class="id">' + esc(p.id) + '</span>' +
+      '<span class="txt">' + esc(recortar(p.titulo, 130)) + '</span>' +
+      '<span class="cuando">' + (p.quien ? esc(p.quien) + ' · ' : '') +
+      esc(antiguedad(p.dias)) + '</span></div>';
+    dibujados += 1;
+  }
+  if (f.length > dibujados) {
+    h += '<div class="muy-tenue">y ' + (f.length - dibujados) + ' más que no ' +
+      'se dibujan acá: están en el seguimiento del proyecto, que es la ' +
+      'verdad</div>';
+  }
+  return h;
+}
+
 function tarjeta(pr) {
   var h = '<div class="tarjeta"><h2>' + esc(pr.nombre) + "</h2>" +
           '<div class="muy-tenue">' +
@@ -755,6 +973,17 @@ function tarjeta(pr) {
          '<div class="muy-tenue">' + esc(pr.nube.error) + '</div>';
   }
 
+  /* Cuánto de lo escrito está cerrado, en una barra y con los dos números al
+     lado. Sin los números una barra se interpreta, y con veinte puntos abiertos
+     la interpretación optimista es la fácil. */
+  var hechos = pr.cuenta_total["hecho"];
+  var faltan = (pr.falta || []).length;
+  var todo = hechos + faltan;
+  h += '<div class="barra"><span style="width:' +
+    (todo ? Math.round(100 * hechos / todo) : 0) + '%"></span></div>' +
+    '<div class="muy-tenue">' + esc(hechos) + ' hechos en toda la historia · ' +
+    esc(faltan) + ' abiertos ahora</div>';
+
   h += "<h3>Puntos abiertos</h3><div class=\"chips\">";
   for (var i = 0; i < ESTADOS.length; i++) {
     h += chip(ESTADOS[i], pr.cuenta_abiertos[ESTADOS[i]], CLASE[ESTADOS[i]]);
@@ -763,20 +992,17 @@ function tarjeta(pr) {
     h += chip("sin estado", pr.cuenta_abiertos["sin estado"], CLASE["sin estado"]);
   }
   h += "</div>";
-  h += '<div class="muy-tenue">y ' + esc(pr.cuenta_total["hecho"]) +
-       " hechos en toda la historia del archivo</div>";
 
-  h += "<h3>Te bloquean a vos · pendiente (Pablo)</h3>" +
-       '<div class="chips">' +
-       chip("puntos", pr.pendientes_de_pablo.length, "e-pablo") + "</div>" +
-       listaPuntos(pr.pendientes_de_pablo, 7);
-
-  h += "<h3>En curso</h3>" + listaPuntos(pr.en_curso, 3);
-
+  /* Las dos columnas, y cuál manda: **lo que falta**. Lo demás —quién trabaja,
+     las ramas, los commits, el CI— contesta «cómo va», que es otra pregunta y
+     va al costado. Hasta hoy estaba al revés y para saber qué falta había que
+     bajar por el medio de todo eso. */
+  h += '<div class="dos-columnas"><div>' + bloqueFalta(pr) + '</div><div>';
   h += bloqueCuadrilla(pr);
   h += bloqueRamas(pr);
   h += bloqueCommits(pr);
   h += bloqueCI(pr);
+  h += '</div></div>';
 
   var rep = pr.seguimiento.repetidos.filter(function (r) { return r.discrepa; });
   if (rep.length) {
@@ -872,12 +1098,345 @@ function filaAgente(a) {
     '<div class="meta">' + esc(a.asunto) + '</div></div>';
 }
 
+/* ---------------------------------------------------------------------------
+   Las tres zonas, y cada agente en UNA
+
+   Hasta el 2026-08-17 los agentes eran una lista sola ordenada por quién se
+   movió recién, y el que trabaja se distinguía del que se cayó hace nueve horas
+   por el color de un borde de 4 px. Pablo pidió tres cosas que son la misma:
+   que los que se mueven ahora sean lo principal, que tengan más información, y
+   que el que se traba con una pregunta **se vea rápido**.
+
+   Entonces la vista se parte en tres, y la regla es que **nadie se dibuja dos
+   veces**: eso es lo que costó entender en T41 y no se vuelve a pagar.
+
+     pide   está trabado esperando a una persona, o falló. Zona propia arriba
+            de todo, y **casi siempre vacía**: si dibujara algo en cada corrida
+            sería el aviso que enseña a ignorarse.
+     vivos  se está moviendo ahora, medido con el umbral del servidor.
+     resto  todo lo demás, en el renglón de tres líneas que ya estaba probado.
+
+   Los umbrales son dos y no se mezclan: una sesión de esta máquina se mide en
+   minutos (`umbrales_taller`, FRESCO = 5 min) y una rama publicada en horas
+   (`umbrales`, FRESCO = 45 min). Medir una con el otro sería afirmar sobre un
+   reloj lo que dice el otro.
+--------------------------------------------------------------------------- */
+function pideUnaPersona(s) {
+  /* **Un fantasma no espera a nadie.** El CLI da por `esperando` a todo
+     background que murió sin avisar —su registro no se limpia nunca, T37— y de
+     esos no queda ningún archivo. Se vio mirando la pantalla el 2026-08-17: con
+     la zona nueva recién hecha, los dos primeros carteles de «trabado: espera a
+     una persona» eran dos agentes muertos hacía horas. O sea que la zona que se
+     inventó para que un pedido se vea rápido iba a estar ocupada siempre, que
+     es exactamente el aviso que enseña a ignorarse.
+
+     Quién es fantasma lo decide `consola.es_fantasma()`, en el servidor y en un
+     solo lugar; acá sólo se lee. */
+  if (s.fantasma) return false;
+  return s.estado_consola === "esperando" || s.estado_consola === "falló";
+}
+
+function trabajandoAhora(s) {
+  if (pideUnaPersona(s)) return false;
+  var seg = haceVivo(s.quieto_hace);
+  /* El proceso que ya no está no está trabajando, por reciente que sea su
+     última línea: `viva === false` es un hecho medido, no un rato. */
+  if (seg !== null && s.viva !== false) {
+    return estadoTaller(seg, "trabajando") === "trabajando";
+  }
+  /* Un background sin archivo no tiene reloj que mirar: su estado lo afirma el
+     CLI y recalcularlo sería inventarlo. **Salvo que sea un fantasma**: de ése
+     el CLI afirma algo que su propio archivo desmiente, y no se lo pone entre
+     los que trabajan por la misma razón que no se lo pone entre los que piden
+     una persona. */
+  if (seg === null && !s.fantasma && s.estado_consola === "trabajando") return true;
+  /* Y el que sólo publicó —otra máquina, un contenedor— con SU reloj. */
+  if (s.fuente === "github" && s.github) {
+    return estadoVivo(haceVivo(s.github.hace_seg), s.github.estado) === "trabajando";
+  }
+  return false;
+}
+
+function zonas(filas) {
+  var z = { pide: [], vivos: [], resto: [] };
+  for (var i = 0; i < (filas || []).length; i++) {
+    var s = filas[i];
+    if (pideUnaPersona(s)) z.pide.push(s);
+    else if (trabajandoAhora(s)) z.vivos.push(s);
+    else z.resto.push(s);
+  }
+  return z;
+}
+
+/* ---------------------------------------------------------------------------
+   El orden fijo y el renglón que se actualiza por adentro: son lo mismo
+
+   El pedido: «los agentes que están vivos tienen que quedar fijo y que se vaya
+   actualizando el contenido de adentro, no que vayan cambiando el orden a
+   medida que mete una acción cada uno». El orden que manda el servidor es por
+   quién se movió recién, así que con un repintado por `innerHTML` la lista **se
+   baraja sola mientras se la lee**: el renglón que estabas mirando se va de
+   lugar porque otro escribió una línea.
+
+   La primera versión de esto tenía dos mecanismos: una tabla de ranuras que le
+   fijaba a cada agente el lugar de su primera aparición, **y** la
+   reconciliación de nodos de acá abajo. Se sacó la tabla de ranuras y el arnés
+   siguió verde: **no hacía nada**. Y es obvio una vez visto —un nodo que sólo
+   se agrega al final nunca se mueve, así que el orden del DOM ya es el de la
+   primera aparición—, pero costó una corrida en rojo que no se puso roja. Dos
+   mecanismos para lo mismo y uno que no se ejecuta es lo que este proyecto
+   tiene escrito como regla 1, esta vez adentro de una sola función.
+
+   Así que queda uno solo: cada agente tiene su caja, creada **una vez**, con
+   cuatro nodos adentro que se escriben sólo cuando cambian. El reloj es el que
+   cambia siempre, y por eso es su propio nodo y se le toca el texto y no el
+   HTML.
+
+   Verificado ejecutando, no leyendo esto: `verificar-pantalla.js` § 13 pinta
+   dos veces con el orden dado vuelta y comprueba que en la pantalla no se movió
+   nadie, que la caja es **el mismo objeto**, y que el contador avanza sin
+   reescribir lo que el agente está haciendo.
+--------------------------------------------------------------------------- */
+function claveFila(s) {
+  /* La sesión alcanza para los de esta máquina; para el que sólo publicó no hay
+     sesión y la llave es de quién y en qué rama. */
+  return (s.sesion || "") + "·" + (s.proyecto || "") + "·" +
+    (s.quien || s.nombre || "") + "·" + (s.rama || "");
+}
+
+/* El registro de las cajas: una por agente, por la llave de arriba. Mientras un
+   agente siga trabajando, su caja es siempre la misma. */
+var NODOS_VIVOS = {};
+
+function nodoHijo(padre, clase) {
+  var n = document.createElement("div");
+  n.className = clase;
+  padre.appendChild(n);
+  return n;
+}
+
+function ponerHTML(nodo, html) {
+  if (nodo.innerHTML !== html) nodo.innerHTML = html;
+}
+
+function pintarVivos(orden) {
+  var cont = document.getElementById("vivos");
+  if (!cont) return;
+  var presentes = {};
+  for (var i = 0; i < orden.length; i++) {
+    var s = orden[i];
+    var k = claveFila(s);
+    presentes[k] = true;
+    var n = NODOS_VIVOS[k];
+    if (!n) {
+      var caja = document.createElement("div");
+      caja.className = "vivo";
+      /* Al final, siempre: un `insertBefore` acá sería mover a los que ya
+         están, que es exactamente lo que este cambio vino a sacar. */
+      cont.appendChild(caja);
+      var cab = nodoHijo(caja, "cab");
+      n = {
+        caja: caja, cab: cab,
+        quien: nodoHijo(cab, "cab-txt"),
+        reloj: nodoHijo(cab, "reloj-grande"),
+        accion: nodoHijo(caja, "accion"),
+        datos: nodoHijo(caja, "dato"),
+        subs: nodoHijo(caja, "subs")
+      };
+      NODOS_VIVOS[k] = n;
+    }
+    var clase = "vivo " + colorVivo(s);
+    if (n.caja.className !== clase) n.caja.className = clase;
+    ponerHTML(n.quien, vivoQuien(s));
+    ponerHTML(n.accion, vivoAccion(s));
+    ponerHTML(n.datos, vivoDatos(s));
+    ponerHTML(n.subs, vivoSubs(s));
+    n.reloj.textContent = relojDe(s);
+    n.fila = s;
+  }
+  for (var k2 in NODOS_VIVOS) {
+    if (presentes[k2] || !NODOS_VIVOS.hasOwnProperty(k2)) continue;
+    var viejo = NODOS_VIVOS[k2];
+    if (viejo.caja.parentNode) viejo.caja.parentNode.removeChild(viejo.caja);
+    /* El que se fue pierde su lugar: si vuelve, entra al final como uno nuevo,
+       que es lo que de verdad pasó. */
+    delete NODOS_VIVOS[k2];
+  }
+  var nota = document.getElementById("vivos-nota");
+  if (nota) {
+    ponerHTML(nota, orden.length ? "" :
+      '<div class="nada">ningún agente escribiendo ahora mismo. Los de más ' +
+      'abajo trabajaron hace rato, o publicaron desde otra máquina</div>');
+  }
+}
+
+/* Cada segundo, y sin tocar una sola línea de HTML: el texto del reloj y —si
+   cruzó un umbral— el color de la caja. Es lo único que cambia entre dos
+   lecturas del servidor. */
+function refrescarVivos() {
+  for (var k in NODOS_VIVOS) {
+    if (!NODOS_VIVOS.hasOwnProperty(k)) continue;
+    var n = NODOS_VIVOS[k];
+    if (!n.fila) continue;
+    n.reloj.textContent = relojDe(n.fila);
+    var clase = "vivo " + colorVivo(n.fila);
+    if (n.caja.className !== clase) n.caja.className = clase;
+  }
+}
+
+function relojDe(s) {
+  if (s.quieto_hace !== null && s.quieto_hace !== undefined) {
+    return hace(haceVivo(s.quieto_hace));
+  }
+  if (s.github && s.github.hace_seg !== null && s.github.hace_seg !== undefined) {
+    return hace(haceVivo(s.github.hace_seg));
+  }
+  return "hace cuánto: no sé";
+}
+
+function estaLatiendo(s) {
+  return !!(D && D.umbrales_taller && s.quieto_hace !== null &&
+    s.quieto_hace !== undefined &&
+    haceVivo(s.quieto_hace) < D.umbrales_taller.latiendo);
+}
+
+/* «Se despertó» —un sha nuevo, no un reloj (T20)— sigue valiendo acá arriba. Al
+   pasar los que trabajan a su propia zona, la marca se habría perdido justo
+   para los agentes a los que se les puede ver empujar: la señal no se muda con
+   el renglón si nadie la lleva. */
+function seDesperto(s) {
+  var g = s.github || null;
+  if (!g) return false;
+  var k = claveAgente(g);
+  return !!(DESPIERTOS[k] && DESPIERTOS[k] > Date.now());
+}
+
+function colorVivo(s) {
+  /* Dos verdes y no uno: el que está escribiendo **en este segundo** y el que
+     trabaja pero está pensando. Los dos están vivos; distinguirlos es lo que
+     hace que el latido siga queriendo decir algo. */
+  return (estaLatiendo(s) ? "v-late" : "v-trabajando") +
+    (seDesperto(s) ? " desperto" : "");
+}
+
+function etiquetas(s) {
+  return '<span class="tag' + (s.proyecto ? '' : ' nose') + '">' +
+    esc(s.proyecto || "sin proyecto") + '</span>' +
+    '<span class="tag' + (s.rol ? ' tag-rol' : ' nose') + '">' +
+    esc(s.rol || "sin rol") + '</span>';
+}
+
+function vivoQuien(s) {
+  return (estaLatiendo(s) ? '<span class="late" title="escribiendo ahora"></span>' : '') +
+    '<b class="nombre">' + esc(s.quien || s.nombre || s.sesion || "sin nombre") +
+    '</b>' + etiquetas(s);
+}
+
+function vivoAccion(s) {
+  /* Lo que está haciendo, en cuerpo grande: es lo segundo que se lee y lo
+     primero que se pregunta. Sin herramienta se dice el motivo — no se inventa
+     una ni se deja el hueco, que se leería como «no hace nada». */
+  if (s.que) {
+    return '<b>' + esc(s.que) + '</b>' +
+      (s.sobre ? ' <span>' + esc(s.sobre) + '</span>' : '');
+  }
+  if (s.fuente === "github" && s.github) {
+    return '<span>' + esc(s.github.asunto || "sin asunto") + '</span>';
+  }
+  return '<span class="tenue">' + esc(s.motivo_que || "no se sabe qué está haciendo") +
+    '</span>';
+}
+
+function vivoDatos(s) {
+  /* El contexto en un renglón: de dónde sale, en qué rama, sobre qué punto.
+     `fuente` se dice con todas las letras porque un agente de otra máquina y
+     uno de acá se miden con relojes distintos, y quien mira tiene que saber
+     cuál está leyendo. */
+  var d = [];
+  if (s.fuente === "github") d.push("<b>publicado</b> desde otra máquina");
+  else if (s.viva === true) d.push("sesión prendida acá");
+  else if (s.viva === false) d.push("el proceso no está");
+  if (s.estado_consola) d.push(esc(s.estado_consola));
+  var rama = s.rama || (s.github && s.github.que) || "";
+  if (rama) d.push("rama <b>" + esc(rama) + "</b>");
+  var punto = s.github && s.github.punto;
+  if (punto) d.push("punto <b>" + esc(punto) + "</b>");
+  if (s.github && s.github.estado) d.push(esc(s.github.estado) + " en GitHub");
+  if (s.cwd) d.push(esc(corto(s.cwd)));
+  if (s.id) d.push('<b>claude attach ' + esc(s.id) + '</b>');
+  return d.join(" · ");
+}
+
+function vivoSubs(s) {
+  /* Los subagentes, uno por línea. **Sin el «no tiene ninguno»**: ese cartel
+     salía en todas las tarjetas y es el aviso que enseña a ignorarse. */
+  var hijos = s.agentes || [];
+  if (!hijos.length) return "";
+  var h = "";
+  for (var i = 0; i < hijos.length; i++) {
+    var a = hijos[i];
+    var seg = haceVivo(a.quieto_hace);
+    var e = estadoTaller(seg, a.estado);
+    /* Las dos cosas de un subagente, y son distintas: **para qué lo llamaron**
+       (la descripción, que no cambia) y **qué está haciendo ahora** (la
+       herramienta de la cola de su transcripción). Mostrar sólo la primera es
+       lo que hacía que un subagente colgado y uno trabajando se vieran igual. */
+    h += '<div class="sub"><span class="chip ' + (CLASE_TALLER[e] || "nose") +
+      '">' + esc(e) + '</span>' +
+      '<em>' + esc(a.tipo || "agente") + '</em> ' +
+      esc((a.descripcion || "sin descripción").slice(0, 60)) +
+      (a.que ? ' · <b>' + esc(a.que) + '</b>' +
+        (a.sobre ? ' ' + esc(a.sobre) : '') : '') +
+      '<span class="reloj-sub">' + esc(hace(seg)) + '</span></div>';
+    for (var j = 0; j < (a.hijos || []).length; j++) {
+      var n = a.hijos[j];
+      h += '<div class="sub"><em>↳ ' + esc(n.tipo || "agente") + '</em> ' +
+        esc((n.descripcion || "sin descripción").slice(0, 50)) + '</div>';
+    }
+  }
+  return h;
+}
+
+/* ---------------------------------------------------------------------------
+   El que se trabó. Zona propia, ancho completo, arriba de todo.
+
+   No es «el mismo renglón un poco más arriba»: si sólo cambiara de posición,
+   el que mira tendría que **darse cuenta** de que cambió de posición, y eso es
+   justo lo que no pasa cuando uno mira un tablero de reojo.
+--------------------------------------------------------------------------- */
+function pintarPide(filas) {
+  var cont = document.getElementById("pide");
+  if (!cont) return;
+  var h = "";
+  for (var i = 0; i < filas.length; i++) {
+    var s = filas[i];
+    var fallo = s.estado_consola === "falló";
+    h += '<div class="pide' + (fallo ? ' pide-rojo' : '') + '">' +
+      '<div class="titulo-pide">' +
+      (fallo ? 'Falló y nadie se enteró' : 'Trabado: espera a una persona') +
+      '</div>' +
+      '<div class="quien-pide"><b>' +
+      esc(s.quien || s.nombre || s.sesion || "un agente") + '</b> ' +
+      etiquetas(s) + '</div>' +
+      (s.que ? '<div class="accion"><b>' + esc(s.que) + '</b>' +
+        (s.sobre ? ' <span>' + esc(s.sobre) + '</span>' : '') + '</div>' : '') +
+      '<div class="dato">' + vivoDatos(s) + '</div>' +
+      (s.motivo_consola ? '<div class="porque">' + esc(s.motivo_consola) +
+        '</div>' : '') +
+      (s.id ? '<div class="attach">claude attach ' + esc(s.id) + '</div>' : '') +
+      '</div>';
+  }
+  ponerHTML(cont, h);
+}
+
 function pintarAgentes() {
-  /* Sólo los que no tienen sesión acá. Los demás ya se dibujaron arriba, con lo
-     suyo de GitHub adentro del mismo renglón: dibujarlos dos veces es el bug
-     que esta tanda vino a arreglar. */
+  /* Sólo los que no tienen sesión acá **y no están arriba**: los que trabajan
+     ahora se dibujan en su zona, y dibujarlos dos veces es el bug que T41 vino
+     a arreglar. */
   var soloPublicados = ((D && D.agentes_todos) || [])
-    .filter(function (f) { return f.fuente === "github"; })
+    .filter(function (f) {
+      return f.fuente === "github" && !trabajandoAhora(f) && !pideUnaPersona(f);
+    })
     .map(function (f) { return f.github; });
   var cont = document.getElementById("agentes");
   var ag = soloPublicados.length || !(D && D.agentes_todos)
@@ -1117,10 +1676,22 @@ function pintarTaller() {
   var todos = (D && D.agentes_todos) || [];
   var filas = todos.filter(function (f) { return f.fuente !== "github"; });
   if (!todos.length) filas = t.agentes_maquina || t.sesiones || [];
+  /* Los que trabajan ahora y los que piden una persona **ya se dibujaron
+     arriba**, en su zona. Acá queda el resto: los que trabajaron hace rato y
+     los que se cerraron. */
+  var conZona = zonas(filas);
+  filas = conZona.resto;
   if (!filas.length) {
-    cont.innerHTML = h + '<div class="nada">ningún agente de Claude Code en ' +
-      'esta máquina. Los de otra máquina no se ven acá: eso lo contesta ' +
-      'GitHub, en la otra pestaña</div>';
+    /* **Cero acá no siempre es cero.** Si los que hay están todos arriba,
+       decir «ningún agente de Claude Code en esta máquina» sería mentir justo
+       cuando el tablero está lleno — la regla 3 por la vía de una lista vacía.
+       Son dos frases distintas porque son dos hechos distintos. */
+    cont.innerHTML = h + '<div class="nada">' +
+      (conZona.pide.length || conZona.vivos.length
+        ? 'ningún otro: todos los agentes de esta máquina están arriba, ' +
+          'trabajando ahora'
+        : 'ningún agente de Claude Code en esta máquina. Los de otra máquina ' +
+          'no se ven acá: eso lo contesta GitHub') + '</div>';
     return;
   }
   for (var i = 0; i < filas.length; i++) {
@@ -1176,7 +1747,13 @@ function pintarTaller() {
        en cada tarjeta —incluido «sin subagentes todavía», que sale en todas— y
        eso es el aviso que enseña a ignorarse. Ahora se muestra el motivo del
        estado sólo cuando dice algo que el renglón de arriba no dice. */
-    if (s.motivo_consola && s.fuente === "cli") {
+    /* El motivo baja **sólo cuando dice algo que el renglón no dice**: que el
+       CLI lo da por vivo y no queda archivo suyo (T37), o la palabra cruda de
+       un estado que capataz no entiende. «terminado · terminó solo» no agrega
+       nada y no baja. Antes la condición era «viene del CLI», que es de dónde
+       sale el dato y no qué dice — y desde que un background con archivo puede
+       estar trabado, esa condición escondía justo el motivo que importa. */
+    if (s.motivo_consola && (s.fantasma || s.estado_consola === "no sé")) {
       h += '<div class="porque">' + esc(s.motivo_consola) + '</div>';
     }
     if (!s.que && s.motivo_que) {
@@ -1426,6 +2003,20 @@ function pintar(d) {
      unida** —que es la que se dibuja—, más el estado de la consola y los
      desacuerdos, que también se pintan ahí. Sigue sin mirar el reloj: el
      `mtime` cambia cada dos segundos y eso haría parpadear la sección entera. */
+  /* Las dos zonas de arriba se pintan **siempre**, sin firma que las cuide:
+     `pintarVivos` compara nodo por nodo y sólo escribe lo que cambió, así que
+     llamarla de más no cuesta nada y llamarla de menos deja el reloj viejo.
+     La firma es para lo que se redibuja entero, que es lo de abajo. */
+  var z = zonas(((d && d.agentes_todos) || []));
+  pintarPide(z.pide);
+  pintarVivos(z.vivos);
+  var tv = document.getElementById("titulo-vivos");
+  if (tv) {
+    tv.textContent = z.vivos.length
+      ? "Trabajando ahora · " + z.vivos.length
+      : "Trabajando ahora";
+  }
+
   var firmaT = JSON.stringify(
     ((d.taller && (d.taller.agentes_maquina || d.taller.sesiones)) || []).map(
       function (s) {
@@ -1469,6 +2060,9 @@ function traer() {
 
 function tick() {
   tickRelojes();
+  /* Los de arriba se refrescan por adentro: se les toca el texto del reloj y,
+     si cruzaron un umbral, la clase de la caja. Ni una línea de HTML. */
+  refrescarVivos();
   pintarFrescura();
 }
 

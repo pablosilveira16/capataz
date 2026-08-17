@@ -239,21 +239,48 @@ try:
         # arma tablas; éste sale de un regex por línea, que es otro algoritmo.
         # Si los dos dan lo mismo sobre el MISMO texto real, el parser no se
         # está inventando puntos ni perdiéndolos.
+        #
+        # **Y el conteo a mano mira la última celda, no el renglón entero.** La
+        # primera versión buscaba `en curso (` en toda la línea y se puso roja
+        # el 2026-08-17 con tres puntos —T3, T10b y T32— que **hablan de** un
+        # `en curso (fulano)` en su título mientras su estado dice otra cosa. La
+        # roja era del arnés, que es la primera hipótesis cuando un arnés falla:
+        # capataz leía bien y el que confundía una frase con un estado era el
+        # que verifica. Es la misma trampa que ya se había comido a
+        # `verificar-angosto.py` con el comentario que explica que no hay
+        # tablas.
+        #
+        # Sigue siendo otro algoritmo —una expresión regular por línea, sin
+        # armar ninguna tabla ni mirar encabezados—, que es lo que hace que
+        # comparar los dos signifique algo.
         vista = lector.mirar(proy, datos, HOY)
         a_mano_pablo = set()
         a_mano_curso = set()
+        filas_vistas = 0
         for linea in (texto or "").splitlines():
             if not linea.strip().startswith("|"):
                 continue
             m = re.match(r"^\|\s*([A-Za-z]{1,4}\d+[a-z]?)\s*\|", linea)
             if not m:
                 continue
-            if re.search(r"pendiente\s*\(\s*Pablo", linea, re.I):
+            celdas = [c.strip() for c in linea.strip().strip("|").split("|")]
+            if len(celdas) < 2:
+                continue
+            filas_vistas += 1
+            estado = celdas[-1]
+            if re.search(r"pendiente\s*\(\s*Pablo", estado, re.I):
                 a_mano_pablo.add(m.group(1))
-            if re.search(r"en curso\s*\(", linea, re.I):
+            if re.search(r"en curso\s*\(", estado, re.I):
                 a_mano_curso.add(m.group(1))
-        af("el conteo a mano encontró algo que comparar (si no, no compara nada)",
+        af("el conteo a mano encontró filas que comparar (si no, no compara nada)",
+           filas_vistas >= 10, filas_vistas)
+        af("y encontró al menos un «pendiente (Pablo)» de verdad",
            len(a_mano_pablo) >= 1, sorted(a_mano_pablo))
+        # El de `en curso` **puede dar cero y no es un hueco**: depende de si en
+        # este momento hay alguien con un punto tomado en `main`. Lo que sostiene
+        # esa comparación cuando da vacía es la de arriba —el mismo camino de
+        # código, ejercitado con datos— y la § 2 de `verificar-lector.py`, que
+        # tiene dos `en curso` escritos a mano y contados a mano.
         igual("los «pendiente (Pablo)»: capataz y el conteo a mano coinciden",
               sorted(p["id"] for p in vista["pendientes_de_pablo"]),
               sorted(a_mano_pablo))
